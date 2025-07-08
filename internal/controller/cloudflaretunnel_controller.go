@@ -20,17 +20,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/cloudflare/cloudflare-go"
 	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
 	pkgcloudflare "github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
 )
@@ -44,7 +43,7 @@ const (
 type CloudflareTunnelReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
-	CloudflareClient *pkgcloudflare.Client
+	CloudflareClient pkgcloudflare.ClientInterface
 }
 
 // NewCloudflareClient creates a new Cloudflare client from environment variables.
@@ -78,7 +77,7 @@ func NewCloudflareClient(apiToken, accountID string) (*pkgcloudflare.Client, err
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
+	_ = logf.FromContext(ctx)
 
 	// Fetch the CloudflareTunnel instance
 	tunnel := &networkingv1alpha1.CloudflareTunnel{}
@@ -169,7 +168,7 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 
 // IsTunnelNotFoundError checks if the error is a tunnel not found error.
 func IsTunnelNotFoundError(err error) bool {
-	return err != nil && err.Error().Contains("not found")
+	return err != nil && strings.Contains(err.Error(), "not found")
 }
 
 func (r *CloudflareTunnelReconciler) createTunnelSecret(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel, secret []byte) error {

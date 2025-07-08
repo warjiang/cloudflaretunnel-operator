@@ -9,11 +9,20 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 )
 
+// ClientInterface defines the interface for the Cloudflare client.
+type ClientInterface interface {
+	CreateTunnel(ctx context.Context, name string) (*cloudflare.Tunnel, []byte, error)
+	GetTunnelByName(ctx context.Context, name string) (*cloudflare.Tunnel, error)
+	DeleteTunnel(ctx context.Context, tunnelID string) error
+}
+
 // Client is a wrapper around the Cloudflare API client.
 type Client struct {
 	api       *cloudflare.API
 	accountID string
 }
+
+var _ ClientInterface = &Client{}
 
 // NewClient creates a new Cloudflare client.
 func NewClient(apiToken, accountID string) (*Client, error) {
