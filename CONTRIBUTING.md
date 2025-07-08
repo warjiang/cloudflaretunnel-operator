@@ -56,4 +56,14 @@ nodes:
 - role: control-plane
   image: fronted-cn-beijing.cr.volces.com/container/kindest/node:v1.31.4
 EOF
+
+
+kind get kubeconfig --name cloudflare-tunnel > ~/.kube/cloudflare-tunnel-config
+
+scp lion@192.168.10.10:~/.kube/cloudflare-tunnel-config ~/.kube/cloudflare-tunnel-config
+
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cloudflare-tunnel-control-plane
 ```
+
+
+update `server` like `https://172.18.0.6:6443`
