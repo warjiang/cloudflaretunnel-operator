@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupTest(t *testing.T, handler http.Handler) (*Client, *http.ServeMux, func()) {
+func setupTest(t *testing.T, handler http.Handler) (*Client, func()) {
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 	server := httptest.NewServer(mux)
@@ -25,7 +25,7 @@ func setupTest(t *testing.T, handler http.Handler) (*Client, *http.ServeMux, fun
 		accountID: "test-account-id",
 	}
 
-	return client, mux, func() {
+	return client, func() {
 		server.Close()
 	}
 }
@@ -36,10 +36,19 @@ func TestCreateTunnel(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		// Use a fixed, valid timestamp to avoid parsing issues.
 		// Also, omitting deleted_at as it can cause issues if empty.
-		fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":{"id":"test-tunnel-id","name":"test-tunnel","created_at":"2024-01-01T00:00:00Z"}}`)
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":{
+				"id":"test-tunnel-id",
+				"name":"test-tunnel",
+				"created_at":"2024-01-01T00:00:00Z"
+			}
+		}`)
 	})
 
-	client, _, teardown := setupTest(t, handler)
+	client, teardown := setupTest(t, handler)
 	defer teardown()
 
 	tunnel, secret, err := client.CreateTunnel(context.Background(), "test-tunnel")
@@ -54,10 +63,19 @@ func TestGetTunnelByName(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method, "Expected method 'GET'")
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[{"id":"test-tunnel-id","name":"test-tunnel","created_at":"2024-01-01T00:00:00Z"}]}`)
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":[{
+				"id":"test-tunnel-id",
+				"name":"test-tunnel",
+				"created_at":"2024-01-01T00:00:00Z"
+			}]
+		}`)
 	})
 
-	client, _, teardown := setupTest(t, handler)
+	client, teardown := setupTest(t, handler)
 	defer teardown()
 
 	tunnel, err := client.GetTunnelByName(context.Background(), "test-tunnel")
@@ -69,10 +87,10 @@ func TestGetTunnelByName(t *testing.T) {
 func TestGetTunnelByName_NotFound(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[]}`)
+		_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[]}`)
 	})
 
-	client, _, teardown := setupTest(t, handler)
+	client, teardown := setupTest(t, handler)
 	defer teardown()
 
 	_, err := client.GetTunnelByName(context.Background(), "not-found-tunnel")
@@ -83,10 +101,10 @@ func TestDeleteTunnel(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method, "Expected method 'DELETE'")
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":{"id":"test-tunnel-id"}}`)
+		_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":{"id":"test-tunnel-id"}}`)
 	})
 
-	client, _, teardown := setupTest(t, handler)
+	client, teardown := setupTest(t, handler)
 	defer teardown()
 
 	err := client.DeleteTunnel(context.Background(), "test-tunnel-id")

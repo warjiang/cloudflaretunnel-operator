@@ -86,7 +86,7 @@ func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Handle deletion
-	if !tunnel.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !tunnel.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, tunnel)
 	}
 
