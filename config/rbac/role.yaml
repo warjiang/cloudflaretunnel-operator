@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - networking.cloudflare-tunnel.spotty.com.cn
+  resources:
+  - cloudflaretunnels
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.cloudflare-tunnel.spotty.com.cn
+  resources:
+  - cloudflaretunnels/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking.cloudflare-tunnel.spotty.com.cn
+  resources:
+  - cloudflaretunnels/status
+  verbs:
+  - get
+  - patch
+  - update
