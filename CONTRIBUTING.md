@@ -45,3 +45,15 @@ This will run the operator outside of a Kubernetes cluster, using your local kub
 3.  Make your changes and commit them with a clear and descriptive message.
 4.  Push your changes to your fork.
 5.  Open a pull request against the `main` branch of the original repository.
+
+
+setup kind cluster for development
+```shell
+cat <<EOF | kind create cluster --name=cloudflare-tunnel --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  image: fronted-cn-beijing.cr.volces.com/container/kindest/node:v1.31.4
+EOF
+```
