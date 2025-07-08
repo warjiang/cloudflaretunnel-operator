@@ -1,0 +1,47 @@
+# Contributing to the Cloudflare Tunnel Operator
+
+We welcome contributions to the Cloudflare Tunnel Operator! This document provides guidelines for developing and contributing to the project.
+
+## Development Environment
+
+To develop the operator locally, you will need:
+
+*   Go (v1.21+)
+*   Docker
+*   `make`
+
+## Building the Operator
+
+To build the operator binary, run the following command:
+
+```bash
+make build
+```
+
+## Running the Tests
+
+To run the unit tests, use the following command:
+
+```bash
+make test
+```
+
+## Running the Operator Locally
+
+To run the operator on your local machine, you will need to provide your Cloudflare API token and account ID as environment variables.
+
+```bash
+export CLOUDFLARE_API_TOKEN=<YOUR_CLOUDFLARE_API_TOKEN>
+export CLOUDFLARE_ACCOUNT_ID=<YOUR_CLOUDFLARE_ACCOUNT_ID>
+make run
+```
+
+This will run the operator outside of a Kubernetes cluster, using your local kubeconfig file to connect to the cluster.
+
+## Submitting a Pull Request
+
+1.  Fork the repository.
+2.  Create a new branch for your feature or bug fix.
+3.  Make your changes and commit them with a clear and descriptive message.
+4.  Push your changes to your fork.
+5.  Open a pull request against the `main` branch of the original repository.
