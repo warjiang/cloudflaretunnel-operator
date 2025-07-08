@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cloudflare/cloudflare-go"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,7 +53,9 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: networkingv1alpha1.CloudflareTunnelSpec{
+						Name: resourceName,
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -68,17 +72,25 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
+			mockCloudflareClient := new(MockCloudflareClient)
 			controllerReconciler := &CloudflareTunnelReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				CloudflareClient: mockCloudflareClient,
 			}
+
+			// Mock the GetTunnelByName function to return a "not found" error,
+			// which will trigger the tunnel creation logic.
+			mockCloudflareClient.On("GetTunnelByName", ctx, "test-resource").Return(nil, fmt.Errorf("not found"))
+			mockCloudflareClient.On("CreateTunnel", ctx, "test-resource").Return(&cloudflare.Tunnel{ID: "test-tunnel-id"}, []byte("test-secret"), nil)
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Verify that the mock functions were called as expected
+			mockCloudflareClient.AssertExpectations(GinkgoT())
 		})
 	})
 })

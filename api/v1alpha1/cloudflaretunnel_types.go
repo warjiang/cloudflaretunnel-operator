@@ -25,17 +25,20 @@ import (
 
 // CloudflareTunnelSpec defines the desired state of CloudflareTunnel.
 type CloudflareTunnelSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of CloudflareTunnel. Edit cloudflaretunnel_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Name specifies the name of the Cloudflare tunnel.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
 }
 
 // CloudflareTunnelStatus defines the observed state of CloudflareTunnel.
 type CloudflareTunnelStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// TunnelID is the unique identifier of the Cloudflare tunnel.
+	// +optional
+	TunnelID string `json:"tunnelID,omitempty"`
+
+	// Conditions represent the latest available observations of a CloudflareTunnel's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
