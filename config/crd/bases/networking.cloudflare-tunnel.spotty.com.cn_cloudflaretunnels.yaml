@@ -39,10 +39,20 @@ spec:
           spec:
             description: CloudflareTunnelSpec defines the desired state of CloudflareTunnel.
             properties:
+              cloudflareAccountId:
+                description: CloudflareAccountID is the account ID for the Cloudflare
+                  account.
+                type: string
+              cloudflareApiToken:
+                description: CloudflareAPIToken is the API token for the Cloudflare
+                  API.
+                type: string
               name:
                 description: Name specifies the name of the Cloudflare tunnel.
                 type: string
             required:
+            - cloudflareAccountId
+            - cloudflareApiToken
             - name
             type: object
           status:
