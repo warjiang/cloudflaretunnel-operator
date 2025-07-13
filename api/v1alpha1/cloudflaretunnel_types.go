@@ -28,6 +28,14 @@ type CloudflareTunnelSpec struct {
 	// Name specifies the name of the Cloudflare tunnel.
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
+
+	// CloudflareAPIToken is the API token for the Cloudflare API.
+	// +kubebuilder:validation:Required
+	CloudflareAPIToken string `json:"cloudflareApiToken"`
+
+	// CloudflareAccountID is the account ID for the Cloudflare account.
+	// +kubebuilder:validation:Required
+	CloudflareAccountID string `json:"cloudflareAccountId"`
 }
 
 // CloudflareTunnelStatus defines the observed state of CloudflareTunnel.

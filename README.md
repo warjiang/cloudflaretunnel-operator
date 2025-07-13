@@ -45,18 +45,15 @@ metadata:
   name: my-tunnel
 spec:
   name: my-first-tunnel
+  cloudflareApiToken: <YOUR_CLOUDFLARE_API_TOKEN>
+  cloudflareAccountId: <YOUR_CLOUDFLARE_ACCOUNT_ID>
 ```
 
 When you apply this manifest, the operator will create a new Cloudflare Tunnel named `my-first-tunnel` in your Cloudflare account. The operator will also create a Kubernetes secret named `my-tunnel-token` containing the tunnel's token.
 
 ## Configuration
 
-The operator can be configured using command-line flags or environment variables:
-
-| Flag                    | Environment Variable      | Description                      |
-| ----------------------- | ------------------------- | -------------------------------- |
-| `--cloudflare-api-token`  | `CLOUDFLARE_API_TOKEN`    | Your Cloudflare API token.       |
-| `--cloudflare-account-id` | `CLOUDFLARE_ACCOUNT_ID`   | Your Cloudflare account ID.      |
+The operator is configured through the `CloudflareTunnel` custom resource.
 
 ## Contributing
 

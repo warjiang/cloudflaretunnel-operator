@@ -24,10 +24,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
 )
@@ -40,7 +39,7 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		cloudflaretunnel := &networkingv1alpha1.CloudflareTunnel{}
 
@@ -54,7 +53,9 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 						Namespace: "default",
 					},
 					Spec: networkingv1alpha1.CloudflareTunnelSpec{
-						Name: resourceName,
+						Name:                resourceName,
+						CloudflareAPIToken:  "test-token",
+						CloudflareAccountID: "test-account-id",
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -62,7 +63,6 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &networkingv1alpha1.CloudflareTunnel{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -70,8 +70,10 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			By("Cleanup the specific resource instance CloudflareTunnel")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
+
 			mockCloudflareClient := new(MockCloudflareClient)
 			controllerReconciler := &CloudflareTunnelReconciler{
 				Client:           k8sClient,

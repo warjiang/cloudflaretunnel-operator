@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -44,22 +43,6 @@ type CloudflareTunnelReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
 	CloudflareClient pkgcloudflare.ClientInterface
-}
-
-// NewCloudflareClient creates a new Cloudflare client from environment variables.
-func NewCloudflareClient(apiToken, accountID string) (*pkgcloudflare.Client, error) {
-	if apiToken == "" {
-		apiToken = os.Getenv("CLOUDFLARE_API_TOKEN")
-	}
-	if accountID == "" {
-		accountID = os.Getenv("CLOUDFLARE_ACCOUNT_ID")
-	}
-
-	if apiToken == "" || accountID == "" {
-		return nil, fmt.Errorf("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set")
-	}
-
-	return pkgcloudflare.NewClient(apiToken, accountID)
 }
 
 // +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
