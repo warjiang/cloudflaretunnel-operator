@@ -39,6 +39,7 @@ import (
 
 	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
 	"github.com/warjiang/cloudflare-tunnel-operator/internal/controller"
+	pkgcloudflare "github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -64,6 +65,18 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+	var (
+		cfAPIToken  string
+		cfAccountID string
+		cfAPIKey    string
+		cfAPIEmail  string
+		cfDebug     bool
+	)
+	flag.StringVar(&cfAPIToken, "cloudflare-api-token", "", "Cloudflare API token.")
+	flag.StringVar(&cfAccountID, "cloudflare-account-id", "", "Cloudflare account ID.")
+	flag.StringVar(&cfAPIKey, "cloudflare-api-key", "", "Cloudflare API key.")
+	flag.StringVar(&cfAPIEmail, "cloudflare-api-email", "", "Cloudflare API email.")
+	flag.BoolVar(&cfDebug, "cloudflare-debug", false, "Enable debug logging for Cloudflare client.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -201,9 +214,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfOpts := []pkgcloudflare.Option{
+		pkgcloudflare.WithAccountID(cfAccountID),
+		pkgcloudflare.WithDebug(cfDebug),
+	}
+	if cfAPIToken != "" {
+		cfOpts = append(cfOpts, pkgcloudflare.WithAPIToken(cfAPIToken))
+	} else if cfAPIKey != "" && cfAPIEmail != "" {
+		cfOpts = append(cfOpts, pkgcloudflare.WithGlobalKey(cfAPIKey))
+		cfOpts = append(cfOpts, pkgcloudflare.WithEmail(cfAPIEmail))
+	}
+
+	cfClient, err := pkgcloudflare.NewClient(cfAccountID, cfOpts...)
+	if err != nil {
+		setupLog.Error(err, "unable to create cloudflare client")
+		os.Exit(1)
+	}
+
 	if err = (&controller.CloudflareTunnelReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		CloudflareClient: cfClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CloudflareTunnel")
 		os.Exit(1)

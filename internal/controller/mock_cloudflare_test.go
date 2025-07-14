@@ -28,9 +28,32 @@ func (m *MockCloudflareClient) GetTunnelByName(ctx context.Context, name string)
 	return args.Get(0).(*cloudflare.Tunnel), args.Error(1)
 }
 
-func (m *MockCloudflareClient) DeleteTunnel(ctx context.Context, tunnelID string) error {
+func (m *MockCloudflareClient) DeleteTunnelByID(ctx context.Context, tunnelID string) error {
 	args := m.Called(ctx, tunnelID)
 	return args.Error(0)
+}
+
+func (m *MockCloudflareClient) DeleteTunnelByName(ctx context.Context, name string) error {
+	args := m.Called(ctx, name)
+	return args.Error(0)
+}
+
+func (m *MockCloudflareClient) ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]cloudflare.Tunnel), args.Error(1)
+}
+
+func (m *MockCloudflareClient) GetTunnelTokenByID(ctx context.Context, tunnelID string) (string, error) {
+	args := m.Called(ctx, tunnelID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCloudflareClient) GetTunnelTokenByName(ctx context.Context, name string) (string, error) {
+	args := m.Called(ctx, name)
+	return args.String(0), args.Error(1)
 }
 
 var _ pkgcloudflare.ClientInterface = &MockCloudflareClient{}

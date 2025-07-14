@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cloudflare/cloudflare-go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,14 +15,14 @@ func setupTest(t *testing.T, handler http.Handler) (*Client, func()) {
 	mux.Handle("/", handler)
 	server := httptest.NewServer(mux)
 
-	api, err := cloudflare.NewWithAPIToken("test-api-token")
+	client, err := NewClient(
+		"mock_account_id",
+		WithAPIToken("test-api-token"),
+		WithAccountID("test-account-id"),
+		WithBaseURL(server.URL),
+		WithHTTPClient(server.Client()),
+	)
 	assert.NoError(t, err, "Failed to create Cloudflare API client")
-	api.BaseURL = server.URL
-
-	client := &Client{
-		api:       api,
-		accountID: "test-account-id",
-	}
 
 	return client, func() {
 		server.Close()
@@ -84,7 +83,7 @@ func TestGetTunnelByName(t *testing.T) {
 	assert.Equal(t, "test-tunnel-id", tunnel.ID)
 }
 
-func TestGetTunnelByName_NotFound(t *testing.T) {
+func TestGetTunnelByNameNotFound(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[]}`)
@@ -97,7 +96,7 @@ func TestGetTunnelByName_NotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeleteTunnel(t *testing.T) {
+func TestDeleteTunnelByID(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method, "Expected method 'DELETE'")
 		w.Header().Set("Content-Type", "application/json")
@@ -107,6 +106,115 @@ func TestDeleteTunnel(t *testing.T) {
 	client, teardown := setupTest(t, handler)
 	defer teardown()
 
-	err := client.DeleteTunnel(context.Background(), "test-tunnel-id")
+	err := client.DeleteTunnelByID(context.Background(), "test-tunnel-id")
 	assert.NoError(t, err)
+}
+
+func TestDeleteTunnelByName(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/accounts/mock_account_id/cfd_tunnel":
+			_, _ = fmt.Fprint(w, `{
+				"success":true,
+				"errors":[],
+				"messages":[],
+				"result":[{
+					"id":"test-tunnel-id",
+					"name":"test-tunnel",
+					"created_at":"2024-01-01T00:00:00Z"
+				}]
+			}`)
+		case "/accounts/mock_account_id/cfd_tunnel/test-tunnel-id":
+			_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":{"id":"test-tunnel-id"}}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	err := client.DeleteTunnelByName(context.Background(), "test-tunnel")
+	assert.NoError(t, err)
+}
+
+func TestListTunnels(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method, "Expected method 'GET'")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":[{
+				"id":"test-tunnel-id",
+				"name":"test-tunnel",
+				"created_at":"2024-01-01T00:00:00Z"
+			}]
+		}`)
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	tunnels, err := client.ListTunnels(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, tunnels, 1)
+	assert.Equal(t, "test-tunnel-id", tunnels[0].ID)
+}
+
+func TestGetTunnelTokenByID(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method, "Expected method 'GET'")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":"test-token"
+		}`)
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	token, err := client.GetTunnelTokenByID(context.Background(), "test-tunnel-id")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-token", token)
+}
+
+func TestGetTunnelTokenByName(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/accounts/mock_account_id/cfd_tunnel":
+			_, _ = fmt.Fprint(w, `{
+				"success":true,
+				"errors":[],
+				"messages":[],
+				"result":[{
+					"id":"test-tunnel-id",
+					"name":"test-tunnel",
+					"created_at":"2024-01-01T00:00:00Z"
+				}]
+			}`)
+		case "/accounts/mock_account_id/cfd_tunnel/test-tunnel-id/token":
+			_, _ = fmt.Fprint(w, `{
+				"success":true,
+				"errors":[],
+				"messages":[],
+				"result":"test-token"
+			}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	token, err := client.GetTunnelTokenByName(context.Background(), "test-tunnel")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-token", token)
 }
