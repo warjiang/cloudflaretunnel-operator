@@ -128,7 +128,9 @@ func (c *Client) DeleteTunnelByName(ctx context.Context, name string) error {
 // ListTunnels lists all Cloudflare tunnels.
 func (c *Client) ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error) {
 	rc := cloudflare.AccountIdentifier(c.accountID)
-	tunnels, _, err := c.api.ListTunnels(ctx, rc, cloudflare.TunnelListParams{})
+	tunnels, _, err := c.api.ListTunnels(ctx, rc, cloudflare.TunnelListParams{
+		IsDeleted: cloudflare.BoolPtr(false),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tunnels: %w", err)
 	}
