@@ -84,7 +84,7 @@ func TestGetTunnelByName(t *testing.T) {
 	assert.Equal(t, "test-tunnel-id", tunnel.ID)
 }
 
-func TestGetTunnelByName_NotFound(t *testing.T) {
+func TestGetTunnelByNameNotFound(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[]}`)
