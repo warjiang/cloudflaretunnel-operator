@@ -27,6 +27,7 @@ var _ ClientInterface = &Client{}
 // NewClient creates a new Cloudflare client.
 func NewClient(apiToken, accountID string) (*Client, error) {
 	api, err := cloudflare.NewWithAPIToken(apiToken)
+	api.Debug = true
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cloudflare client: %w", err)
 	}

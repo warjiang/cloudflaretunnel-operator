@@ -15,9 +15,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	apiKey := os.Getenv("API_KEY")
+	apiToken := os.Getenv("API_TOKEN")
 	accountID := os.Getenv("ACCOUNT_ID")
-	client, err := cloudflare.NewClient(apiKey, accountID)
+	client, err := cloudflare.NewClient(apiToken, accountID)
 	if err != nil {
 		log.Fatal("Error creating client")
 	}
@@ -25,7 +25,7 @@ func main() {
 	ctx := context.TODO()
 	tunnel, bytes, err := client.CreateTunnel(ctx, "my-tunnel")
 	if err != nil {
-		log.Fatalf("Error creating tunnel +%v\n", err)
+		log.Fatalf("Error creating tunnel %v\n", err)
 	}
 	fmt.Println(string(bytes))
 	fmt.Printf("%+v\n", tunnel)
