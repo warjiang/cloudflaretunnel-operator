@@ -14,6 +14,7 @@ type ClientInterface interface {
 	CreateTunnel(ctx context.Context, name string) (*cloudflare.Tunnel, []byte, error)
 	GetTunnelByName(ctx context.Context, name string) (*cloudflare.Tunnel, error)
 	DeleteTunnel(ctx context.Context, tunnelID string) error
+	ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error)
 }
 
 // Client is a wrapper around the Cloudflare API client.
@@ -87,15 +88,15 @@ func (c *Client) CreateTunnel(ctx context.Context, name string) (*cloudflare.Tun
 
 // GetTunnelByName finds a tunnel by its name.
 func (c *Client) GetTunnelByName(ctx context.Context, name string) (*cloudflare.Tunnel, error) {
-	rc := cloudflare.AccountIdentifier(c.accountID)
-	tunnels, _, err := c.api.ListTunnels(ctx, rc, cloudflare.TunnelListParams{})
+	tunnels, err := c.ListTunnels(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list tunnels: %w", err)
+		return nil, err
 	}
 
 	for _, tunnel := range tunnels {
 		if tunnel.Name == name {
-			return &tunnel, nil
+			t := tunnel
+			return &t, nil
 		}
 	}
 
@@ -110,4 +111,15 @@ func (c *Client) DeleteTunnel(ctx context.Context, tunnelID string) error {
 		return fmt.Errorf("failed to delete tunnel: %w", err)
 	}
 	return nil
+}
+
+// ListTunnels lists all Cloudflare tunnels.
+func (c *Client) ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error) {
+	rc := cloudflare.AccountIdentifier(c.accountID)
+	tunnels, _, err := c.api.ListTunnels(ctx, rc, cloudflare.TunnelListParams{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tunnels: %w", err)
+	}
+
+	return tunnels, nil
 }

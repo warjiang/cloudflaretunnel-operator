@@ -109,3 +109,28 @@ func TestDeleteTunnel(t *testing.T) {
 	err := client.DeleteTunnel(context.Background(), "test-tunnel-id")
 	assert.NoError(t, err)
 }
+
+func TestListTunnels(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method, "Expected method 'GET'")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":[{
+				"id":"test-tunnel-id",
+				"name":"test-tunnel",
+				"created_at":"2024-01-01T00:00:00Z"
+			}]
+		}`)
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	tunnels, err := client.ListTunnels(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, tunnels, 1)
+	assert.Equal(t, "test-tunnel-id", tunnels[0].ID)
+}
