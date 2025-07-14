@@ -134,3 +134,58 @@ func TestListTunnels(t *testing.T) {
 	assert.Len(t, tunnels, 1)
 	assert.Equal(t, "test-tunnel-id", tunnels[0].ID)
 }
+
+func TestGetTunnelTokenByID(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method, "Expected method 'GET'")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":"test-token"
+		}`)
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	token, err := client.GetTunnelTokenByID(context.Background(), "test-tunnel-id")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-token", token)
+}
+
+func TestGetTunnelTokenByName(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/accounts/mock_account_id/cfd_tunnel":
+			_, _ = fmt.Fprint(w, `{
+				"success":true,
+				"errors":[],
+				"messages":[],
+				"result":[{
+					"id":"test-tunnel-id",
+					"name":"test-tunnel",
+					"created_at":"2024-01-01T00:00:00Z"
+				}]
+			}`)
+		case "/accounts/mock_account_id/cfd_tunnel/test-tunnel-id/token":
+			_, _ = fmt.Fprint(w, `{
+				"success":true,
+				"errors":[],
+				"messages":[],
+				"result":"test-token"
+			}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	token, err := client.GetTunnelTokenByName(context.Background(), "test-tunnel")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-token", token)
+}

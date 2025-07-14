@@ -15,6 +15,8 @@ type ClientInterface interface {
 	GetTunnelByName(ctx context.Context, name string) (*cloudflare.Tunnel, error)
 	DeleteTunnel(ctx context.Context, tunnelID string) error
 	ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error)
+	GetTunnelTokenByID(ctx context.Context, tunnelID string) (string, error)
+	GetTunnelTokenByName(ctx context.Context, name string) (string, error)
 }
 
 // Client is a wrapper around the Cloudflare API client.
@@ -122,4 +124,23 @@ func (c *Client) ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error) {
 	}
 
 	return tunnels, nil
+}
+
+// GetTunnelTokenByID gets a Cloudflare tunnel token by ID.
+func (c *Client) GetTunnelTokenByID(ctx context.Context, tunnelID string) (string, error) {
+	rc := cloudflare.AccountIdentifier(c.accountID)
+	token, err := c.api.GetTunnelToken(ctx, rc, tunnelID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get tunnel token: %w", err)
+	}
+	return token, nil
+}
+
+// GetTunnelTokenByName gets a Cloudflare tunnel token by name.
+func (c *Client) GetTunnelTokenByName(ctx context.Context, name string) (string, error) {
+	tunnel, err := c.GetTunnelByName(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	return c.GetTunnelTokenByID(ctx, tunnel.ID)
 }

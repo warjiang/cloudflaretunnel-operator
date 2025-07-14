@@ -22,8 +22,10 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -117,6 +119,27 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	tunnel.Status.TunnelID = cfTunnel.ID
 	if err := r.Status().Update(ctx, tunnel); err != nil {
 		log.Error(err, "failed to update tunnel status")
+		return ctrl.Result{}, err
+	}
+
+	// Check if the secret exists
+	secretName := fmt.Sprintf("%s-token", tunnel.Name)
+	var secret corev1.Secret
+	err = r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: tunnel.Namespace}, &secret)
+	if err != nil && apierrors.IsNotFound(err) {
+		log.Info("tunnel secret not found, creating it")
+		// If the secret does not exist, create it
+		token, err := r.CloudflareClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
+		if err != nil {
+			log.Error(err, "failed to get tunnel token")
+			return ctrl.Result{}, err
+		}
+		if err := r.createTunnelSecret(ctx, tunnel, []byte(token)); err != nil {
+			log.Error(err, "failed to create tunnel secret")
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		log.Error(err, "failed to get tunnel secret")
 		return ctrl.Result{}, err
 	}
 

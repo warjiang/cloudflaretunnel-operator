@@ -41,4 +41,14 @@ func (m *MockCloudflareClient) ListTunnels(ctx context.Context) ([]cloudflare.Tu
 	return args.Get(0).([]cloudflare.Tunnel), args.Error(1)
 }
 
+func (m *MockCloudflareClient) GetTunnelTokenByID(ctx context.Context, tunnelID string) (string, error) {
+	args := m.Called(ctx, tunnelID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCloudflareClient) GetTunnelTokenByName(ctx context.Context, name string) (string, error) {
+	args := m.Called(ctx, name)
+	return args.String(0), args.Error(1)
+}
+
 var _ pkgcloudflare.ClientInterface = &MockCloudflareClient{}
