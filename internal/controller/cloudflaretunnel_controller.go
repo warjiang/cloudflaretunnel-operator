@@ -153,7 +153,7 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 		// Delete the tunnel
 		if tunnel.Status.TunnelID != "" {
 			log.Info("deleting cloudflare tunnel")
-			if err := r.CloudflareClient.DeleteTunnel(ctx, tunnel.Status.TunnelID); err != nil {
+			if err := r.CloudflareClient.DeleteTunnelByID(ctx, tunnel.Status.TunnelID); err != nil {
 				// If the tunnel is already deleted, we can ignore the error
 				if !IsTunnelNotFoundError(err) {
 					log.Error(err, "failed to delete cloudflare tunnel")

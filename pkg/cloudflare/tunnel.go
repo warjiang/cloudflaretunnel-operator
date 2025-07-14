@@ -13,7 +13,8 @@ import (
 type ClientInterface interface {
 	CreateTunnel(ctx context.Context, name string) (*cloudflare.Tunnel, []byte, error)
 	GetTunnelByName(ctx context.Context, name string) (*cloudflare.Tunnel, error)
-	DeleteTunnel(ctx context.Context, tunnelID string) error
+	DeleteTunnelByID(ctx context.Context, tunnelID string) error
+	DeleteTunnelByName(ctx context.Context, name string) error
 	ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error)
 	GetTunnelTokenByID(ctx context.Context, tunnelID string) (string, error)
 	GetTunnelTokenByName(ctx context.Context, name string) (string, error)
@@ -105,14 +106,23 @@ func (c *Client) GetTunnelByName(ctx context.Context, name string) (*cloudflare.
 	return nil, fmt.Errorf("tunnel with name '%s' not found", name)
 }
 
-// DeleteTunnel deletes a Cloudflare tunnel.
-func (c *Client) DeleteTunnel(ctx context.Context, tunnelID string) error {
+// DeleteTunnelByID deletes a Cloudflare tunnel.
+func (c *Client) DeleteTunnelByID(ctx context.Context, tunnelID string) error {
 	rc := cloudflare.AccountIdentifier(c.accountID)
 	err := c.api.DeleteTunnel(ctx, rc, tunnelID)
 	if err != nil {
 		return fmt.Errorf("failed to delete tunnel: %w", err)
 	}
 	return nil
+}
+
+// DeleteTunnelByName deletes a Cloudflare tunnel by name.
+func (c *Client) DeleteTunnelByName(ctx context.Context, name string) error {
+	tunnel, err := c.GetTunnelByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	return c.DeleteTunnelByID(ctx, tunnel.ID)
 }
 
 // ListTunnels lists all Cloudflare tunnels.
