@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/joho/godotenv"
-	"github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
+	"github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
 )
 
 func main() {
