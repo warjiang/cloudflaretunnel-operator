@@ -25,12 +25,42 @@ type Client struct {
 var _ ClientInterface = &Client{}
 
 // NewClient creates a new Cloudflare client.
-func NewClient(apiToken, accountID string) (*Client, error) {
-	api, err := cloudflare.NewWithAPIToken(apiToken)
-	api.Debug = true
+func NewClient(accountID string, opts ...Option) (*Client, error) {
+	if accountID == "" {
+		return nil, fmt.Errorf("accountID is required")
+	}
+
+	// apply options
+	cfg := &clientOptions{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	var api *cloudflare.API
+	var err error
+
+	// convert options to official cloudflare options
+	var cloudflareOpts []cloudflare.Option
+	if cfg.httpClient != nil {
+		cloudflareOpts = append(cloudflareOpts, cloudflare.HTTPClient(cfg.httpClient))
+	}
+	if cfg.baseURL != "" {
+		cloudflareOpts = append(cloudflareOpts, cloudflare.BaseURL(cfg.baseURL))
+	}
+	cloudflareOpts = append(cloudflareOpts, cloudflare.Debug(cfg.debug))
+
+	if cfg.apiToken != "" {
+		api, err = cloudflare.NewWithAPIToken(cfg.apiToken, cloudflareOpts...)
+	} else if cfg.globalKey != "" && cfg.email != "" {
+		api, err = cloudflare.New(cfg.globalKey, cfg.email, cloudflareOpts...)
+	} else {
+		return nil, fmt.Errorf("either API token or global key and email must be provided")
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cloudflare client: %w", err)
 	}
+
 	return &Client{
 		api:       api,
 		accountID: accountID,

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cloudflare/cloudflare-go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,14 +15,14 @@ func setupTest(t *testing.T, handler http.Handler) (*Client, func()) {
 	mux.Handle("/", handler)
 	server := httptest.NewServer(mux)
 
-	api, err := cloudflare.NewWithAPIToken("test-api-token")
+	client, err := NewClient(
+		"mock_account_id",
+		WithAPIToken("test-api-token"),
+		WithAccountID("test-account-id"),
+		WithBaseURL(server.URL),
+		WithHTTPClient(server.Client()),
+	)
 	assert.NoError(t, err, "Failed to create Cloudflare API client")
-	api.BaseURL = server.URL
-
-	client := &Client{
-		api:       api,
-		accountID: "test-account-id",
-	}
 
 	return client, func() {
 		server.Close()

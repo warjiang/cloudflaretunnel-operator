@@ -17,7 +17,10 @@ func main() {
 	}
 	apiToken := os.Getenv("API_TOKEN")
 	accountID := os.Getenv("ACCOUNT_ID")
-	client, err := cloudflare.NewClient(apiToken, accountID)
+	client, err := cloudflare.NewClient(
+		accountID,
+		cloudflare.WithAPIToken(apiToken),
+	)
 	if err != nil {
 		log.Fatal("Error creating client")
 	}
