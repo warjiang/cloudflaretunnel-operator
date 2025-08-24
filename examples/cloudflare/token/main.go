@@ -31,5 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating tunnel %v\n", err)
 	}
-	fmt.Println(tunnel)
+	fmt.Printf("token is %s\n", tunnel)
+	fmt.Println("you can run the following command to start the tunnel:")
+	fmt.Printf("docker run docker.cr.20220625.xyz/cloudflare/cloudflared:latest tunnel --no-autoupdate run --token %s\n", tunnel)
 }

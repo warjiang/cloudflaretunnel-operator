@@ -22,7 +22,7 @@ func main() {
 		cloudflare.WithAPIToken(apiToken),
 	)
 	if err != nil {
-		log.Fatal("Error creating client")
+		log.Fatalf("Error creating client %+v", err)
 	}
 
 	ctx := context.TODO()
@@ -32,6 +32,7 @@ func main() {
 	}
 
 	for _, tunnel := range tunnels {
+		// here we cannot extract secret from the list of tunnels
 		fmt.Printf("Tunnel ID: %s, Name: %s, Secret:%s \n", tunnel.ID, tunnel.Name, tunnel.Secret)
 	}
 }
