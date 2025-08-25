@@ -65,6 +65,10 @@ kind get kubeconfig --name cloudflaretunnel > ~/.kube/cloudflaretunnel.config
 scp lion@192.168.10.10:~/.kube/cloudflaretunnel ~/.kube/cloudflaretunnel
 
 docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cloudflaretunnel-control-plane
+
+
+kustomize build config/on-premises | kubectl apply -f -
+kustomize build config/on-premises | kubectl delete -f -
 ```
 
 
