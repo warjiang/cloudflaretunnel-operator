@@ -88,20 +88,25 @@ func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
+	cfClient, err := r.getCloudflareClient(tunnel)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Check if the tunnel exists
-	cfTunnel, err := r.CloudflareClient.GetTunnelByName(ctx, tunnel.Spec.Name)
+	cfTunnel, err := cfClient.GetTunnelByName(ctx, tunnel.Spec.Name)
 	if err != nil {
 		// If the tunnel does not exist, create it
 		if IsTunnelNotFoundError(err) {
 			log.Info("creating cloudflare tunnel")
-			newTunnel, _, err := r.CloudflareClient.CreateTunnel(ctx, tunnel.Spec.Name)
+			newTunnel, _, err := cfClient.CreateTunnel(ctx, tunnel.Spec.Name)
 			if err != nil {
 				log.Error(err, "failed to create cloudflare tunnel")
 				return ctrl.Result{}, err
 			}
 			cfTunnel = newTunnel
 
-			token, err := r.CloudflareClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
+			token, err := cfClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -156,11 +161,16 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
+	cfClient, err := r.getCloudflareClient(tunnel)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if controllerutil.ContainsFinalizer(tunnel, finalizer) {
 		// Delete the tunnel
 		if tunnel.Status.TunnelID != "" {
 			log.Info("deleting cloudflare tunnel")
-			if err := r.CloudflareClient.DeleteTunnelByID(ctx, tunnel.Status.TunnelID); err != nil {
+			if err := cfClient.DeleteTunnelByID(ctx, tunnel.Status.TunnelID); err != nil {
 				// If the tunnel is already deleted, we can ignore the error
 				if !IsTunnelNotFoundError(err) {
 					log.Error(err, "failed to delete cloudflare tunnel")
@@ -179,9 +189,23 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 	return ctrl.Result{}, nil
 }
 
-// IsTunnelNotFoundError checks if the error is a tunnel not found error.
-func IsTunnelNotFoundError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "not found")
+func (r *CloudflareTunnelReconciler) getCloudflareClient(tunnel *networkingv1alpha1.CloudflareTunnel) (pkgcloudflare.ClientInterface, error) {
+	cfClient := r.CloudflareClient
+	if tunnel.Spec.CloudflareAccountID != "" &&
+		tunnel.Spec.CloudflareAPIToken != "" {
+		cfOpts := []pkgcloudflare.Option{
+			pkgcloudflare.WithAccountID(tunnel.Spec.CloudflareAccountID),
+			pkgcloudflare.WithAPIToken(tunnel.Spec.CloudflareAPIToken),
+			pkgcloudflare.WithDebug(true),
+		}
+		newCfClient, err := pkgcloudflare.NewClient(tunnel.Spec.CloudflareAccountID, cfOpts...)
+		if err != nil {
+			return nil, err
+		}
+		cfClient = newCfClient
+	}
+
+	return cfClient, nil
 }
 
 func (r *CloudflareTunnelReconciler) createTunnelSecret(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel, secret []byte) error {
@@ -213,4 +237,9 @@ func (r *CloudflareTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&networkingv1alpha1.CloudflareTunnel{}).
 		Named("cloudflaretunnel").
 		Complete(r)
+}
+
+// IsTunnelNotFoundError checks if the error is a tunnel not found error.
+func IsTunnelNotFoundError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "not found")
 }
