@@ -5,7 +5,7 @@ import (
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/stretchr/testify/mock"
-	pkgcloudflare "github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
+	pkgcloudflare "github.com/warjiang/cloudflaretunnel-operator/pkg/cloudflare"
 )
 
 type MockCloudflareClient struct {

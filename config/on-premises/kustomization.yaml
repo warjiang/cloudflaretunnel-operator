@@ -1,12 +1,12 @@
 # Adds namespace to all resources.
-namespace: cloudflare-tunnel-operator-system
+namespace: cloudflaretunnel-operator-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: cloudflare-tunnel-operator-
+namePrefix: cloudflaretunnel-operator-
 
 # Labels to add to all resources and selectors.
 #labels:
@@ -15,8 +15,8 @@ namePrefix: cloudflare-tunnel-operator-
 #    someName: someValue
 
 images:
-- name: cloudflare-tunnel-operator
-  newName: fronted-cn-beijing.cr.volces.com/container/warjiang/cloudflare-tunnel-operator
+- name: cloudflaretunnel-operator
+  newName: fronted-cn-beijing.cr.volces.com/container/warjiang/cloudflaretunnel-operator
   newTag: main
 resources:
 - ../crd

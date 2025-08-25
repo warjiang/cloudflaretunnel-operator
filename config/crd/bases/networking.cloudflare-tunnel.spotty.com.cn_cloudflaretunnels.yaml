@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: cloudflaretunnels.networking.cloudflare-tunnel.spotty.com.cn
+  name: cloudflaretunnels.networking.cloudflaretunnel.spotty.com.cn
 spec:
-  group: networking.cloudflare-tunnel.spotty.com.cn
+  group: networking.cloudflaretunnel.spotty.com.cn
   names:
     kind: CloudflareTunnel
     listKind: CloudflareTunnelList

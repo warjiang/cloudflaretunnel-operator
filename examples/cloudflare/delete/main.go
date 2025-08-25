@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
+	"github.com/warjiang/cloudflaretunnel-operator/pkg/cloudflare"
 )
 
 func main() {

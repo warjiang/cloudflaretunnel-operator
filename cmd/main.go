@@ -37,9 +37,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
-	"github.com/warjiang/cloudflare-tunnel-operator/internal/controller"
-	pkgcloudflare "github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
+	networkingv1alpha1 "github.com/warjiang/cloudflaretunnel-operator/api/v1alpha1"
+	"github.com/warjiang/cloudflaretunnel-operator/internal/controller"
+	pkgcloudflare "github.com/warjiang/cloudflaretunnel-operator/pkg/cloudflare"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -196,7 +196,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "ee81828f.cloudflare-tunnel.spotty.com.cn",
+		LeaderElectionID:       "ee81828f.cloudflaretunnel.spotty.com.cn",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - networking.cloudflare-tunnel.spotty.com.cn
+  - networking.cloudflaretunnel.spotty.com.cn
   resources:
   - cloudflaretunnels
   verbs:
@@ -29,13 +29,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - networking.cloudflare-tunnel.spotty.com.cn
+  - networking.cloudflaretunnel.spotty.com.cn
   resources:
   - cloudflaretunnels/finalizers
   verbs:
   - update
 - apiGroups:
-  - networking.cloudflare-tunnel.spotty.com.cn
+  - networking.cloudflaretunnel.spotty.com.cn
   resources:
   - cloudflaretunnels/status
   verbs:

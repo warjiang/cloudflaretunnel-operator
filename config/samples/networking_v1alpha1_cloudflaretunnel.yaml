@@ -1,8 +1,8 @@
-apiVersion: networking.cloudflare-tunnel.spotty.com.cn/v1alpha1
+apiVersion: networking.cloudflaretunnel.spotty.com.cn/v1alpha1
 kind: CloudflareTunnel
 metadata:
   labels:
-    app.kubernetes.io/name: cloudflare-tunnel-operator
+    app.kubernetes.io/name: cloudflaretunnel-operator
     app.kubernetes.io/managed-by: kustomize
   name: cloudflaretunnel-sample
 spec:

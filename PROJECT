@@ -3,19 +3,19 @@
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
 cliVersion: 4.6.0
-domain: cloudflare-tunnel.spotty.com.cn
+domain: cloudflaretunnel.spotty.com.cn
 layout:
 - go.kubebuilder.io/v4
-projectName: cloudflare-tunnel-operator
-repo: github.com/warjiang/cloudflare-tunnel-operator
+projectName: cloudflaretunnel-operator
+repo: github.com/warjiang/cloudflaretunnel-operator
 resources:
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: cloudflare-tunnel.spotty.com.cn
+  domain: cloudflaretunnel.spotty.com.cn
   group: networking
   kind: CloudflareTunnel
-  path: github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1
+  path: github.com/warjiang/cloudflaretunnel-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

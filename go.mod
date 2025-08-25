@@ -1,4 +1,4 @@
-module github.com/warjiang/cloudflare-tunnel-operator
+module github.com/warjiang/cloudflaretunnel-operator
 
 go 1.24.0
 

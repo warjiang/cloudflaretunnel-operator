@@ -31,13 +31,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
-	pkgcloudflare "github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
+	networkingv1alpha1 "github.com/warjiang/cloudflaretunnel-operator/api/v1alpha1"
+	pkgcloudflare "github.com/warjiang/cloudflaretunnel-operator/pkg/cloudflare"
 )
 
 const (
 	// finalizer is the finalizer key for the CloudflareTunnel resource.
-	finalizer = "networking.cloudflare-tunnel.spotty.com.cn/finalizer"
+	finalizer = "networking.cloudflaretunnel.spotty.com.cn/finalizer"
 )
 
 // CloudflareTunnelReconciler reconciles a CloudflareTunnel object
@@ -47,9 +47,9 @@ type CloudflareTunnelReconciler struct {
 	CloudflareClient pkgcloudflare.ClientInterface
 }
 
-// +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

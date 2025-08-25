@@ -64,7 +64,7 @@ kind get kubeconfig --name cloudflaretunnel > ~/.kube/cloudflaretunnel.config
 
 scp lion@192.168.10.10:~/.kube/cloudflaretunnel ~/.kube/cloudflaretunnel
 
-docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cloudflare-tunnel-control-plane
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cloudflaretunnel-control-plane
 ```
 
 

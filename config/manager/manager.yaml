@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: cloudflare-tunnel-operator
+    app.kubernetes.io/name: cloudflaretunnel-operator
     app.kubernetes.io/managed-by: kustomize
   name: system
 ---
@@ -14,13 +14,13 @@ metadata:
   namespace: system
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: cloudflare-tunnel-operator
+    app.kubernetes.io/name: cloudflaretunnel-operator
     app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-      app.kubernetes.io/name: cloudflare-tunnel-operator
+      app.kubernetes.io/name: cloudflaretunnel-operator
   replicas: 1
   template:
     metadata:
@@ -28,7 +28,7 @@ spec:
         kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
-        app.kubernetes.io/name: cloudflare-tunnel-operator
+        app.kubernetes.io/name: cloudflaretunnel-operator
     spec:
       # TODO(user): Uncomment the following code to configure the nodeAffinity expression
       # according to the platforms which are supported by your solution.
@@ -63,8 +63,10 @@ spec:
         args:
           - --leader-elect
           - --health-probe-bind-address=:8081
-        image: cloudflare-tunnel-operator:latest
+        image: cloudflaretunnel-operator:latest
         name: manager
+        ports:
+          - containerPort: 8081
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
