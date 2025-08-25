@@ -49,16 +49,18 @@ This will run the operator outside of a Kubernetes cluster, using your local kub
 
 setup kind cluster for development
 ```shell
-cat <<EOF | kind create cluster --name=cloudflare-tunnel --config=-
+cat <<EOF | kind create cluster --name=cloudflaretunnel --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "0.0.0.0"
 nodes:
 - role: control-plane
   image: fronted-cn-beijing.cr.volces.com/container/kindest/node:v1.31.4
 EOF
 
 
-kind get kubeconfig --name cloudflare-tunnel > ~/.kube/cloudflare-tunnel-config
+kind get kubeconfig --name cloudflaretunnel > ~/.kube/cloudflaretunnel.config
 
 scp lion@192.168.10.10:~/.kube/cloudflare-tunnel-config ~/.kube/cloudflare-tunnel-config
 
