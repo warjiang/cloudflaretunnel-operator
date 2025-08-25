@@ -16,7 +16,8 @@ namePrefix: cloudflaretunnel-operator-
 
 images:
 - name: cloudflaretunnel-operator
-  newName: fronted-cn-beijing.cr.volces.com/container/warjiang/cloudflaretunnel-operator
+  newName: xget.xi-xu.me/cr/ghcr/warjiang/cloudflaretunnel-operator
+#  newName: fronted-cn-beijing.cr.volces.com/container/warjiang/cloudflaretunnel-operator
   newTag: main
 resources:
 - ../crd
