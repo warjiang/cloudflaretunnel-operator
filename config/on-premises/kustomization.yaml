@@ -1,12 +1,12 @@
 # Adds namespace to all resources.
-namespace: cloudflaretunnel-operator-system
+namespace: cloudflaretunnel-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: cloudflaretunnel-operator-
+namePrefix: cloudflaretunnel-
 
 # Labels to add to all resources and selectors.
 #labels:
@@ -45,7 +45,10 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
-- path: manager_image_pull_secret_patch.yaml
+#- path: manager_image_pull_secret_patch.yaml
+#  target:
+#    kind: Deployment
+- path: manager_command_patch.yaml
   target:
     kind: Deployment
 
