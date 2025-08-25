@@ -208,6 +208,7 @@ func (r *CloudflareTunnelReconciler) getCloudflareClient(tunnel *networkingv1alp
 	return cfClient, nil
 }
 
+// nolint:unused
 func (r *CloudflareTunnelReconciler) createTunnelSecret(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel, secret []byte) error {
 	secretName := fmt.Sprintf("%s-token", tunnel.Name)
 	secretData := map[string][]byte{
