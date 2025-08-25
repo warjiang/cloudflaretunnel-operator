@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
+	networkingv1alpha1 "github.com/warjiang/cloudflaretunnel-operator/api/v1alpha1"
 )
 
 var _ = Describe("CloudflareTunnel Controller", func() {

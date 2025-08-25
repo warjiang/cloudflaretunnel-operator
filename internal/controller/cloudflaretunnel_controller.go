@@ -22,22 +22,20 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
-	pkgcloudflare "github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
+	networkingv1alpha1 "github.com/warjiang/cloudflaretunnel-operator/api/v1alpha1"
+	pkgcloudflare "github.com/warjiang/cloudflaretunnel-operator/pkg/cloudflare"
 )
 
 const (
 	// finalizer is the finalizer key for the CloudflareTunnel resource.
-	finalizer = "networking.cloudflare-tunnel.spotty.com.cn/finalizer"
+	finalizer = "networking.cloudflaretunnel.spotty.com.cn/finalizer"
 )
 
 // CloudflareTunnelReconciler reconciles a CloudflareTunnel object
@@ -47,9 +45,9 @@ type CloudflareTunnelReconciler struct {
 	CloudflareClient pkgcloudflare.ClientInterface
 }
 
-// +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=networking.cloudflare-tunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -90,25 +88,38 @@ func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
+	cfClient, err := r.getCloudflareClient(tunnel)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Check if the tunnel exists
-	cfTunnel, err := r.CloudflareClient.GetTunnelByName(ctx, tunnel.Spec.Name)
+	cfTunnel, err := cfClient.GetTunnelByName(ctx, tunnel.Spec.Name)
 	if err != nil {
 		// If the tunnel does not exist, create it
 		if IsTunnelNotFoundError(err) {
 			log.Info("creating cloudflare tunnel")
-			newTunnel, secret, err := r.CloudflareClient.CreateTunnel(ctx, tunnel.Spec.Name)
+			newTunnel, _, err := cfClient.CreateTunnel(ctx, tunnel.Spec.Name)
 			if err != nil {
 				log.Error(err, "failed to create cloudflare tunnel")
 				return ctrl.Result{}, err
 			}
 			cfTunnel = newTunnel
 
-			// Create a secret to store the tunnel token
-			if err := r.createTunnelSecret(ctx, tunnel, secret); err != nil {
-				log.Error(err, "failed to create tunnel secret")
+			token, err := cfClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
+			if err != nil {
 				return ctrl.Result{}, err
 			}
+			log.Info("you can run the following command to start the tunnel:")
+			log.Info("docker run docker.cr.20220625.xyz/cloudflare/cloudflared:latest tunnel --no-autoupdate run --token %s\n", token)
 
+			/*
+				// Create a secret to store the tunnel token
+				if err := r.createTunnelSecret(ctx, tunnel, secret); err != nil {
+					log.Error(err, "failed to create tunnel secret")
+					return ctrl.Result{}, err
+				}
+			*/
 		} else {
 			log.Error(err, "failed to get cloudflare tunnel")
 			return ctrl.Result{}, err
@@ -122,38 +133,44 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 		return ctrl.Result{}, err
 	}
 
-	// Check if the secret exists
-	secretName := fmt.Sprintf("%s-token", tunnel.Name)
-	var secret corev1.Secret
-	err = r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: tunnel.Namespace}, &secret)
-	if err != nil && apierrors.IsNotFound(err) {
-		log.Info("tunnel secret not found, creating it")
-		// If the secret does not exist, create it
-		token, err := r.CloudflareClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
-		if err != nil {
-			log.Error(err, "failed to get tunnel token")
+	/*
+		// Check if the secret exists
+		secretName := fmt.Sprintf("%s-token", tunnel.Name)
+		var secret corev1.Secret
+		err = r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: tunnel.Namespace}, &secret)
+		if err != nil && apierrors.IsNotFound(err) {
+			log.Info("tunnel secret not found, creating it")
+			// If the secret does not exist, create it
+			token, err := r.CloudflareClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
+			if err != nil {
+				log.Error(err, "failed to get tunnel token")
+				return ctrl.Result{}, err
+			}
+			if err := r.createTunnelSecret(ctx, tunnel, []byte(token)); err != nil {
+				log.Error(err, "failed to create tunnel secret")
+				return ctrl.Result{}, err
+			}
+		} else if err != nil {
+			log.Error(err, "failed to get tunnel secret")
 			return ctrl.Result{}, err
 		}
-		if err := r.createTunnelSecret(ctx, tunnel, []byte(token)); err != nil {
-			log.Error(err, "failed to create tunnel secret")
-			return ctrl.Result{}, err
-		}
-	} else if err != nil {
-		log.Error(err, "failed to get tunnel secret")
-		return ctrl.Result{}, err
-	}
-
+	*/
 	return ctrl.Result{}, nil
 }
 
 func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
+	cfClient, err := r.getCloudflareClient(tunnel)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if controllerutil.ContainsFinalizer(tunnel, finalizer) {
 		// Delete the tunnel
 		if tunnel.Status.TunnelID != "" {
 			log.Info("deleting cloudflare tunnel")
-			if err := r.CloudflareClient.DeleteTunnelByID(ctx, tunnel.Status.TunnelID); err != nil {
+			if err := cfClient.DeleteTunnelByID(ctx, tunnel.Status.TunnelID); err != nil {
 				// If the tunnel is already deleted, we can ignore the error
 				if !IsTunnelNotFoundError(err) {
 					log.Error(err, "failed to delete cloudflare tunnel")
@@ -172,11 +189,26 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 	return ctrl.Result{}, nil
 }
 
-// IsTunnelNotFoundError checks if the error is a tunnel not found error.
-func IsTunnelNotFoundError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "not found")
+func (r *CloudflareTunnelReconciler) getCloudflareClient(tunnel *networkingv1alpha1.CloudflareTunnel) (pkgcloudflare.ClientInterface, error) {
+	cfClient := r.CloudflareClient
+	if tunnel.Spec.CloudflareAccountID != "" &&
+		tunnel.Spec.CloudflareAPIToken != "" {
+		cfOpts := []pkgcloudflare.Option{
+			pkgcloudflare.WithAccountID(tunnel.Spec.CloudflareAccountID),
+			pkgcloudflare.WithAPIToken(tunnel.Spec.CloudflareAPIToken),
+			pkgcloudflare.WithDebug(true),
+		}
+		newCfClient, err := pkgcloudflare.NewClient(tunnel.Spec.CloudflareAccountID, cfOpts...)
+		if err != nil {
+			return nil, err
+		}
+		cfClient = newCfClient
+	}
+
+	return cfClient, nil
 }
 
+// nolint:unused
 func (r *CloudflareTunnelReconciler) createTunnelSecret(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel, secret []byte) error {
 	secretName := fmt.Sprintf("%s-token", tunnel.Name)
 	secretData := map[string][]byte{
@@ -206,4 +238,9 @@ func (r *CloudflareTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&networkingv1alpha1.CloudflareTunnel{}).
 		Named("cloudflaretunnel").
 		Complete(r)
+}
+
+// IsTunnelNotFoundError checks if the error is a tunnel not found error.
+func IsTunnelNotFoundError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "not found")
 }

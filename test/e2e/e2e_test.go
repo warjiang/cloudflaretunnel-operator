@@ -27,20 +27,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/warjiang/cloudflare-tunnel-operator/test/utils"
+	"github.com/warjiang/cloudflaretunnel-operator/test/utils"
 )
 
 // namespace where the project is deployed in
-const namespace = "cloudflare-tunnel-operator-system"
+const namespace = "cloudflaretunnel-operator-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "cloudflare-tunnel-operator-controller-manager"
+const serviceAccountName = "cloudflaretunnel-operator-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "cloudflare-tunnel-operator-controller-manager-metrics-service"
+const metricsServiceName = "cloudflaretunnel-operator-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "cloudflare-tunnel-operator-metrics-binding"
+const metricsRoleBindingName = "cloudflaretunnel-operator-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -173,7 +173,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=cloudflare-tunnel-operator-metrics-reader",
+				"--clusterrole=cloudflaretunnel-operator-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)

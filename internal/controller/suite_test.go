@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	networkingv1alpha1 "github.com/warjiang/cloudflare-tunnel-operator/api/v1alpha1"
+	networkingv1alpha1 "github.com/warjiang/cloudflaretunnel-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -2,7 +2,7 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/networking.cloudflare-tunnel.spotty.com.cn_cloudflaretunnels.yaml
+- bases/networking.cloudflaretunnel.spotty.com.cn_cloudflaretunnels.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

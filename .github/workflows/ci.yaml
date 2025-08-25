@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/*
 
 jobs:
   build-and-push:
@@ -47,8 +48,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            warjiang/cloudflare-tunnel-operator
-            ghcr.io/warjiang/cloudflare-tunnel-operator
+            warjiang/cloudflaretunnel-operator
+            ghcr.io/warjiang/cloudflaretunnel-operator
           
       - name: Build and push
         uses: docker/build-push-action@v5

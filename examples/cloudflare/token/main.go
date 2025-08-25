@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/warjiang/cloudflare-tunnel-operator/pkg/cloudflare"
+	"github.com/warjiang/cloudflaretunnel-operator/pkg/cloudflare"
 )
 
 func main() {
@@ -33,5 +33,6 @@ func main() {
 	}
 	fmt.Printf("token is %s\n", tunnel)
 	fmt.Println("you can run the following command to start the tunnel:")
+	// nolint:lll
 	fmt.Printf("docker run docker.cr.20220625.xyz/cloudflare/cloudflared:latest tunnel --no-autoupdate run --token %s\n", tunnel)
 }
