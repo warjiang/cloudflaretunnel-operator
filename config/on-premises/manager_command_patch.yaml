@@ -1,0 +1,12 @@
+- op: replace
+  path: /spec/template/spec/containers/0/command
+  value:
+    - /manager
+- op: replace
+  path: /spec/template/spec/containers/0/args
+  value:
+    - --leader-elect
+    - --health-probe-bind-address=:8081
+    - --metrics-bind-address=:8443
+    - --cloudflare-account-id="${cloudflare-account-id}"
+    - --cloudflare-api-token="${cloudflare-api-token}"

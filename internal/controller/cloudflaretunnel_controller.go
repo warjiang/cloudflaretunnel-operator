@@ -35,7 +35,7 @@ import (
 
 const (
 	// finalizer is the finalizer key for the CloudflareTunnel resource.
-	finalizer = "networking.cloudflaretunnel.spotty.com.cn/finalizer"
+	finalizer = "cloudflaretunnel.spotty.com.cn/finalizer"
 )
 
 // CloudflareTunnelReconciler reconciles a CloudflareTunnel object
@@ -45,9 +45,9 @@ type CloudflareTunnelReconciler struct {
 	CloudflareClient pkgcloudflare.ClientInterface
 }
 
-// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=networking.cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

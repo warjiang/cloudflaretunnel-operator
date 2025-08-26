@@ -1,4 +1,4 @@
-apiVersion: networking.cloudflaretunnel.spotty.com.cn/v1alpha1
+apiVersion: cloudflaretunnel.spotty.com.cn/v1alpha1
 kind: CloudflareTunnel
 metadata:
   labels:
@@ -7,3 +7,6 @@ metadata:
   name: cloudflaretunnel-sample
 spec:
   # TODO(user): Add fields here
+  cloudflareAccountId: ''
+  cloudflareApiToken: ''
+  name: createbycr
