@@ -39,7 +39,7 @@ Once the operator is deployed, you can create a Cloudflare Tunnel by creating a 
 **Example:**
 
 ```yaml
-apiVersion: networking.cloudflaretunnel.spotty.com.cn/v1alpha1
+apiVersion: cloudflaretunnel.spotty.com.cn/v1alpha1
 kind: CloudflareTunnel
 metadata:
   name: my-tunnel
