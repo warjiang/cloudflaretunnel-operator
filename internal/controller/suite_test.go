@@ -70,9 +70,11 @@ var _ = BeforeSuite(func() {
 		ErrorIfCRDPathMissing: true,
 	}
 
-	// Retrieve the first found binary directory to allow running tests from IDEs
-	if getFirstFoundEnvTestBinaryDir() != "" {
-		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
+	// Prefer KUBEBUILDER_ASSETS set by `make test`; otherwise try common local paths.
+	if dir := getFirstFoundEnvTestBinaryDir(); dir != "" {
+		testEnv.BinaryAssetsDirectory = dir
+	} else {
+		Skip("envtest binaries not found. Run `make setup-envtest` and export KUBEBUILDER_ASSETS.")
 	}
 
 	// cfg is defined in this file globally.
@@ -87,9 +89,13 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	cancel()
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+	if cancel != nil {
+		cancel()
+	}
+	if testEnv != nil {
+		err := testEnv.Stop()
+		Expect(err).NotTo(HaveOccurred())
+	}
 })
 
 // getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
@@ -101,16 +107,25 @@ var _ = AfterSuite(func() {
 // setting the 'KUBEBUILDER_ASSETS' environment variable. To ensure the binaries are
 // properly set up, run 'make setup-envtest' beforehand.
 func getFirstFoundEnvTestBinaryDir() string {
-	basePath := filepath.Join("..", "..", "bin", "k8s")
-	entries, err := os.ReadDir(basePath)
-	if err != nil {
-		logf.Log.Error(err, "Failed to read directory", "path", basePath)
-		return ""
+	if assets := os.Getenv("KUBEBUILDER_ASSETS"); assets != "" {
+		return assets
 	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return filepath.Join(basePath, entry.Name())
+
+	legacyBasePath := filepath.Join("..", "..", "bin", "k8s")
+	entries, err := os.ReadDir(legacyBasePath)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				return filepath.Join(legacyBasePath, entry.Name())
+			}
 		}
 	}
-	return ""
+
+	fallbackBasePath := filepath.Join("..", "..", "bin")
+	for _, binary := range []string{"etcd", "kube-apiserver", "kubectl"} {
+		if _, statErr := os.Stat(filepath.Join(fallbackBasePath, binary)); statErr != nil {
+			return ""
+		}
+	}
+	return fallbackBasePath
 }

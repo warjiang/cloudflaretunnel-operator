@@ -1,3 +1,12 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-credentials
+type: Opaque
+stringData:
+  api-token: "<YOUR_CLOUDFLARE_API_TOKEN>"
+  account-id: "<YOUR_CLOUDFLARE_ACCOUNT_ID>"
+---
 apiVersion: cloudflaretunnel.spotty.com.cn/v1alpha1
 kind: CloudflareTunnel
 metadata:
@@ -6,7 +15,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cloudflaretunnel-sample
 spec:
-  # TODO(user): Add fields here
-  cloudflareAccountId: ''
-  cloudflareApiToken: ''
   name: createbycr
+  credentialsRef:
+    name: cloudflare-credentials
+  tokenSecretRef:
+    name: cloudflaretunnel-sample-token

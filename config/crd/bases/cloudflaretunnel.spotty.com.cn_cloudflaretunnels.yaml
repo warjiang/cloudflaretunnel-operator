@@ -39,20 +39,39 @@ spec:
           spec:
             description: CloudflareTunnelSpec defines the desired state of CloudflareTunnel.
             properties:
-              cloudflareAccountId:
-                description: CloudflareAccountID is the account ID for the Cloudflare
-                  account.
-                type: string
-              cloudflareApiToken:
-                description: CloudflareAPIToken is the API token for the Cloudflare
-                  API.
-                type: string
+              credentialsRef:
+                description: |-
+                  CredentialsRef points to a Secret that stores Cloudflare credentials.
+                  Required keys:
+                  - api-token
+                  - account-id
+                properties:
+                  name:
+                    description: Name is the Secret name in the same namespace as
+                      the CloudflareTunnel.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               name:
                 description: Name specifies the name of the Cloudflare tunnel.
                 type: string
+              tokenSecretRef:
+                description: |-
+                  TokenSecretRef is where the tunnel token will be stored.
+                  If omitted, "<metadata.name>-token" is used.
+                properties:
+                  name:
+                    description: Name is the Secret name in the same namespace as
+                      the CloudflareTunnel.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
             required:
-            - cloudflareAccountId
-            - cloudflareApiToken
+            - credentialsRef
             - name
             type: object
           status:
@@ -116,6 +135,11 @@ spec:
                   - type
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
               tunnelID:
                 description: TunnelID is the unique identifier of the Cloudflare tunnel.
                 type: string
