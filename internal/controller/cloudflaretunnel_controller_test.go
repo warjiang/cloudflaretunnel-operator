@@ -23,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,9 +54,10 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 						Namespace: "default",
 					},
 					Spec: networkingv1alpha1.CloudflareTunnelSpec{
-						Name:                resourceName,
-						CloudflareAPIToken:  "test-token",
-						CloudflareAccountID: "test-account-id",
+						Name: resourceName,
+						CredentialsRef: networkingv1alpha1.CredentialsSecretRef{
+							Name: "cloudflare-credentials",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -63,6 +65,9 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 		})
 
 		AfterEach(func() {
+			tokenSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-token", resourceName), Namespace: "default"}}
+			_ = k8sClient.Delete(ctx, tokenSecret)
+
 			resource := &networkingv1alpha1.CloudflareTunnel{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -85,11 +90,15 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			// which will trigger the tunnel creation logic.
 			mockCloudflareClient.On("GetTunnelByName", ctx, "test-resource").Return(nil, fmt.Errorf("not found"))
 			mockCloudflareClient.On("CreateTunnel", ctx, "test-resource").Return(&cloudflare.Tunnel{ID: "test-tunnel-id"}, []byte("test-secret"), nil)
+			mockCloudflareClient.On("GetTunnelTokenByID", ctx, "test-tunnel-id").Return("test-token", nil)
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+			tokenSecret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-resource-token", Namespace: "default"}, tokenSecret)).To(Succeed())
+			Expect(tokenSecret.Data).To(HaveKeyWithValue("token", []byte("test-token")))
 
 			// Verify that the mock functions were called as expected
 			mockCloudflareClient.AssertExpectations(GinkgoT())

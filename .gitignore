@@ -33,5 +33,6 @@ go.work.sum
 
 # output directories
 bin/
+.spec-workflow/
 
 

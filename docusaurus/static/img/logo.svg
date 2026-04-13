@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Cloudflare Tunnel Operator logo">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="48" fill="url(#g)"/>
+  <path d="M64 132c0-35 29-64 64-64 22 0 42 11 53 29 5-2 10-3 16-3 21 0 39 17 39 39s-18 39-39 39H97c-18 0-33-15-33-33 0-3 0-5 0-7z" fill="#e0f2fe"/>
+  <path d="M84 162h88" stroke="#0369a1" stroke-width="12" stroke-linecap="round"/>
+</svg>

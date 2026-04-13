@@ -29,13 +29,31 @@ type CloudflareTunnelSpec struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// CloudflareAPIToken is the API token for the Cloudflare API.
+	// CredentialsRef points to a Secret that stores Cloudflare credentials.
+	// Required keys:
+	// - api-token
+	// - account-id
 	// +kubebuilder:validation:Required
-	CloudflareAPIToken string `json:"cloudflareApiToken"`
+	CredentialsRef CredentialsSecretRef `json:"credentialsRef"`
 
-	// CloudflareAccountID is the account ID for the Cloudflare account.
-	// +kubebuilder:validation:Required
-	CloudflareAccountID string `json:"cloudflareAccountId"`
+	// TokenSecretRef is where the tunnel token will be stored.
+	// If omitted, "<metadata.name>-token" is used.
+	// +optional
+	TokenSecretRef *TokenSecretRef `json:"tokenSecretRef,omitempty"`
+}
+
+// CredentialsSecretRef references the Secret containing Cloudflare credentials.
+type CredentialsSecretRef struct {
+	// Name is the Secret name in the same namespace as the CloudflareTunnel.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
+// TokenSecretRef references the Secret where the tunnel token is stored.
+type TokenSecretRef struct {
+	// Name is the Secret name in the same namespace as the CloudflareTunnel.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // CloudflareTunnelStatus defines the observed state of CloudflareTunnel.
@@ -47,6 +65,10 @@ type CloudflareTunnelStatus struct {
 	// Conditions represent the latest available observations of a CloudflareTunnel's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
