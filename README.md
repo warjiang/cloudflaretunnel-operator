@@ -68,11 +68,22 @@ spec:
 
 ## Deploy
 
+With Kustomize:
+
 ```bash
 make docker-build IMG=<image:tag>
 make docker-push IMG=<image:tag>
 make deploy IMG=<image:tag>
 ```
+
+For cross-platform image builds (multi-arch manifest), use:
+
+```bash
+make docker-buildx IMG=<image:tag>
+```
+
+Default image platforms are `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`.
+You can override with `PLATFORMS=<platforms>`.
 
 Apply your manifests:
 
@@ -80,10 +91,49 @@ Apply your manifests:
 kubectl apply -f demo.yaml
 ```
 
+With Helm (CRD auto-install via `crds/`):
+
+```bash
+helm install cloudflaretunnel-operator \
+  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
+  --version <x.y.z> \
+  --namespace cloudflaretunnel-operator-system \
+  --create-namespace
+```
+
+Upgrade:
+
+```bash
+helm upgrade cloudflaretunnel-operator \
+  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
+  --version <x.y.z> \
+  --namespace cloudflaretunnel-operator-system
+```
+
+Uninstall:
+
+```bash
+helm uninstall cloudflaretunnel-operator --namespace cloudflaretunnel-operator-system
+```
+
+Note: CRDs installed from Helm `crds/` are not deleted by `helm uninstall`.
+
 ## Testing
 
 - Unit/controller tests: `make test`
 - E2E tests: `make test-e2e`
+
+## Cross-Platform Binaries
+
+Build manager binaries for multiple platforms:
+
+```bash
+make build-cross
+```
+
+Artifacts are generated under `dist/<goos>-<goarch>/manager`.
+Default binary platforms are `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`.
+You can override with `BINARY_PLATFORMS=<platforms>`.
 
 For local controller tests, install envtest assets first:
 
@@ -165,11 +215,22 @@ spec:
 
 ### 部署
 
+使用 Kustomize：
+
 ```bash
 make docker-build IMG=<image:tag>
 make docker-push IMG=<image:tag>
 make deploy IMG=<image:tag>
 ```
+
+如需构建跨平台镜像（multi-arch manifest），可执行：
+
+```bash
+make docker-buildx IMG=<image:tag>
+```
+
+默认镜像平台为 `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`。
+可通过 `PLATFORMS=<platforms>` 覆盖。
 
 应用资源：
 
@@ -177,10 +238,49 @@ make deploy IMG=<image:tag>
 kubectl apply -f demo.yaml
 ```
 
+使用 Helm（CRD 通过 `crds/` 自动安装）：
+
+```bash
+helm install cloudflaretunnel-operator \
+  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
+  --version <x.y.z> \
+  --namespace cloudflaretunnel-operator-system \
+  --create-namespace
+```
+
+升级：
+
+```bash
+helm upgrade cloudflaretunnel-operator \
+  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
+  --version <x.y.z> \
+  --namespace cloudflaretunnel-operator-system
+```
+
+卸载：
+
+```bash
+helm uninstall cloudflaretunnel-operator --namespace cloudflaretunnel-operator-system
+```
+
+说明：通过 Helm `crds/` 安装的 CRD 不会在 `helm uninstall` 时自动删除。
+
 ### 测试
 
 - 单元/控制器测试：`make test`
 - 端到端测试：`make test-e2e`
+
+### 跨平台二进制构建
+
+构建多平台 manager 二进制：
+
+```bash
+make build-cross
+```
+
+产物输出在 `dist/<goos>-<goarch>/manager`。
+默认二进制平台为 `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`。
+可通过 `BINARY_PLATFORMS=<platforms>` 覆盖。
 
 本地跑控制器测试前建议先准备 envtest 依赖：
 
