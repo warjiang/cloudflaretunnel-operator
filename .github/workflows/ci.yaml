@@ -65,8 +65,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            warjiang/cloudflaretunnel-operator
-            ghcr.io/warjiang/cloudflaretunnel-operator
+            ${{ github.repository_owner }}/cloudflaretunnel-operator
+            ghcr.io/${{ github.repository_owner }}/cloudflaretunnel-operator
           
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -110,4 +110,4 @@ jobs:
       - name: Push chart to GHCR OCI
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          helm push ".cr-release-packages/cloudflaretunnel-operator-${TAG}.tgz" oci://ghcr.io/warjiang/charts
+          helm push ".cr-release-packages/cloudflaretunnel-operator-${TAG}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
