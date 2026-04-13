@@ -102,6 +102,25 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
+.PHONY: clean-dist
+clean-dist: ## Remove cross-platform build artifacts.
+	rm -rf dist
+
+# BINARY_PLATFORMS defines the target platforms for cross-compiling local manager binaries.
+# Format: GOOS/GOARCH entries separated by commas.
+BINARY_PLATFORMS ?= linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64
+.PHONY: build-cross
+build-cross: manifests generate fmt vet clean-dist ## Build manager binary for multiple platforms into dist/<goos>-<goarch>/manager.
+	@set -euo pipefail; \
+	for platform in $$(echo "$(BINARY_PLATFORMS)" | tr ',' ' '); do \
+		GOOS=$${platform%/*}; \
+		GOARCH=$${platform#*/}; \
+		OUTPUT_DIR="dist/$${GOOS}-$${GOARCH}"; \
+		mkdir -p "$${OUTPUT_DIR}"; \
+		echo "Building for $${GOOS}/$${GOARCH}"; \
+		CGO_ENABLED=0 GOOS=$${GOOS} GOARCH=$${GOARCH} go build -o "$${OUTPUT_DIR}/manager" cmd/main.go; \
+	done
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
@@ -123,7 +142,7 @@ docker-push: ## Push docker image with the manager.
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 # - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+PLATFORMS ?= linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile

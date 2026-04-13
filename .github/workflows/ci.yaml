@@ -12,6 +12,23 @@ on:
       - feat/*
 
 jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint chart
+        run: helm lint charts/cloudflaretunnel-operator
+
+      - name: Render chart
+        run: helm template test charts/cloudflaretunnel-operator --namespace cloudflaretunnel-operator-system >/dev/null
+
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -48,13 +65,49 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            warjiang/cloudflaretunnel-operator
-            ghcr.io/warjiang/cloudflaretunnel-operator
+            ${{ github.repository_owner }}/cloudflaretunnel-operator
+            ghcr.io/${{ github.repository_owner }}/cloudflaretunnel-operator
           
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  helm-publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: helm-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set chart version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          CHART="charts/cloudflaretunnel-operator/Chart.yaml"
+          sed -i.bak -E "s/^version: .*/version: ${TAG}/" "${CHART}"
+          sed -i.bak -E "s/^appVersion: .*/appVersion: \"${TAG}\"/" "${CHART}"
+          rm -f "${CHART}.bak"
+
+      - name: Package chart
+        run: |
+          mkdir -p .cr-release-packages
+          helm package charts/cloudflaretunnel-operator --destination .cr-release-packages
+
+      - name: Login to GHCR (OCI)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Push chart to GHCR OCI
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          helm push ".cr-release-packages/cloudflaretunnel-operator-${TAG}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
