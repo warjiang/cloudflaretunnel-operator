@@ -18,6 +18,23 @@ To build the operator binary, run the following command:
 make build
 ```
 
+To build cross-platform binaries, run:
+
+```bash
+make build-cross
+```
+
+Artifacts will be generated under `dist/<goos>-<goarch>/manager`.
+Default platforms are `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`.
+
+To build and push multi-arch container images, run:
+
+```bash
+make docker-buildx IMG=<image:tag>
+```
+
+Default image platforms are `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`.
+
 ## Running the Tests
 
 To run the unit tests, use the following command:
