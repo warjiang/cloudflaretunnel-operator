@@ -8,6 +8,12 @@ slug: /
 
 ![Cloudflare Tunnel Operator Advantages](/img/project-advantages.svg)
 
+## Prerequisites
+
+- Kubernetes cluster access (`kubectl` configured)
+- A Cloudflare API token with tunnel permissions
+- Cloudflare account ID
+
 ## What it does
 
 - Creates a Cloudflare tunnel when it does not exist.
@@ -36,3 +42,5 @@ Credentials Secret requires:
 
 - `api-token`
 - `account-id`
+
+Credentials are not accepted directly in CRD spec fields.

@@ -8,6 +8,12 @@ slug: /
 
 ![Cloudflare Tunnel Operator 项目优势图](/img/project-advantages.svg)
 
+## 前置条件
+
+- 可访问的 Kubernetes 集群（已配置 `kubectl`）
+- 具备 Tunnel 权限的 Cloudflare API Token
+- Cloudflare Account ID
+
 ## 功能
 
 - 当 Tunnel 不存在时自动创建。
@@ -36,3 +42,5 @@ spec:
 
 - `api-token`
 - `account-id`
+
+CRD `spec` 不支持直接填写明文凭据。

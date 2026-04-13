@@ -6,34 +6,15 @@ Cloudflare Tunnel Operator 通过 `CloudflareTunnel` CRD 以声明式方式管�
 
 ![Cloudflare Tunnel Operator 项目优势图](docusaurus/static/img/project-advantages.svg)
 
-## 功能概览
+## 快速开始
 
-该 Operator 会监听 `CloudflareTunnel`，并保证：
+前置条件：
 
-- 目标 Cloudflare Tunnel 存在。
-- 自动创建/更新存放 Tunnel Token 的 Kubernetes Secret。
-- 在状态中写入 `tunnelID`、`observedGeneration` 与条件（conditions）。
+- 可访问的 Kubernetes 集群（已配置 `kubectl`）
+- 具备 Tunnel 权限的 Cloudflare API Token
+- Cloudflare Account ID
 
-## 项目优势
-
-- 凭据采用 `credentialsRef`（Secret 引用）模式，避免在 CR 清单中明文暴露 Token。
-- Tunnel Token 自动同步到 Kubernetes Secret，减少手工操作和配置漂移。
-- 基于 finalizer 的资源生命周期管理，确保云端资源与集群状态一致。
-- 通过 conditions + `observedGeneration` 提供可观测、可排障的状态反馈。
-- 基于 Kubebuilder/controller-runtime 标准模式，便于扩展、测试和工程化落地。
-
-## 凭据模型
-
-Cloudflare 凭据通过 `spec.credentialsRef` 引用的 Secret 提供。
-
-凭据 Secret 必须包含以下 key：
-
-- `api-token`
-- `account-id`
-
-CRD `spec` 中已不再支持明文凭据字段。
-
-## CRD 示例
+1. 创建凭据 Secret：
 
 ```yaml
 apiVersion: v1
@@ -43,9 +24,13 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  api-token: <你的 Cloudflare API Token>
-  account-id: <你的 Cloudflare Account ID>
----
+  api-token: <YOUR_CLOUDFLARE_API_TOKEN>
+  account-id: <YOUR_CLOUDFLARE_ACCOUNT_ID>
+```
+
+2. 创建 `CloudflareTunnel` 资源：
+
+```yaml
 apiVersion: cloudflaretunnel.spotty.com.cn/v1alpha1
 kind: CloudflareTunnel
 metadata:
@@ -59,14 +44,39 @@ spec:
     name: my-tunnel-token
 ```
 
-## 对账行为
+3. 应用资源清单：
 
-- 若 Tunnel 不存在，Operator 会自动创建。
-- Operator 会获取 Tunnel Token 并同步到 `spec.tokenSecretRef.name` 指定的 Secret。
-- 若未配置 `tokenSecretRef`，默认 Secret 名称为 `<CloudflareTunnel.metadata.name>-token`。
-- 删除 CR 时，Operator 会先删除 Cloudflare Tunnel，再移除 finalizer。
+```bash
+kubectl apply -f demo.yaml
+```
 
-## 部署
+4. 查看 Tunnel 状态：
+
+```bash
+kubectl get cloudflaretunnel my-tunnel -n default -o yaml
+```
+
+## 功能说明
+
+该 Operator 会监听 `CloudflareTunnel` 资源，并保证：
+
+- 目标 Cloudflare Tunnel 存在。
+- 存放 Tunnel Token 的 Kubernetes Secret 被创建或更新。
+- 状态字段（`tunnelID`、`observedGeneration`、conditions）反映当前对账结果。
+- 删除资源时通过 finalizer 清理云端 Tunnel。
+
+## 凭据模型
+
+Cloudflare 凭据通过 `spec.credentialsRef` 引用的 Secret 提供。
+
+Secret 必须包含以下 key：
+
+- `api-token`
+- `account-id`
+
+CRD `spec` 不再支持直接填写明文凭据。
+
+## 安装部署
 
 使用 Kustomize：
 
@@ -76,26 +86,23 @@ make docker-push IMG=<image:tag>
 make deploy IMG=<image:tag>
 ```
 
-如需构建跨平台镜像（multi-arch manifest），可执行：
+如需构建并推送多架构镜像：
 
 ```bash
 make docker-buildx IMG=<image:tag>
 ```
 
-默认镜像平台为 `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`。
+默认镜像平台：
+
+`linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`
+
 可通过 `PLATFORMS=<platforms>` 覆盖。
-
-应用资源：
-
-```bash
-kubectl apply -f demo.yaml
-```
 
 使用 Helm（CRD 通过 `crds/` 自动安装）：
 
 ```bash
 helm install cloudflaretunnel-operator \
-  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
+  oci://ghcr.io/<github-owner>/charts/cloudflaretunnel-operator \
   --version <x.y.z> \
   --namespace cloudflaretunnel-operator-system \
   --create-namespace
@@ -105,7 +112,7 @@ helm install cloudflaretunnel-operator \
 
 ```bash
 helm upgrade cloudflaretunnel-operator \
-  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
+  oci://ghcr.io/<github-owner>/charts/cloudflaretunnel-operator \
   --version <x.y.z> \
   --namespace cloudflaretunnel-operator-system
 ```
@@ -118,25 +125,23 @@ helm uninstall cloudflaretunnel-operator --namespace cloudflaretunnel-operator-s
 
 说明：通过 Helm `crds/` 安装的 CRD 不会在 `helm uninstall` 时自动删除。
 
-## 测试
+## 开发常用命令
 
-- 单元/控制器测试：`make test`
-- 端到端测试：`make test-e2e`
+- 编译 manager 二进制：`make build`
+- 构建跨平台二进制：`make build-cross`
+- 运行单元/控制器测试：`make test`
+- 运行端到端测试：`make test-e2e`
+- 本地运行控制器：`make run`
+- 安装 envtest 依赖：`make setup-envtest`
 
-## 跨平台二进制构建
+跨平台二进制输出目录：`dist/<goos>-<goarch>/manager`
 
-构建多平台 manager 二进制：
+默认二进制平台：
 
-```bash
-make build-cross
-```
+`linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`
 
-产物输出在 `dist/<goos>-<goarch>/manager`。
-默认二进制平台为 `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`。
 可通过 `BINARY_PLATFORMS=<platforms>` 覆盖。
 
-本地跑控制器测试前建议先准备 envtest 依赖：
+## 贡献
 
-```bash
-make setup-envtest
-```
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
