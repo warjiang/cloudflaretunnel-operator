@@ -2,38 +2,19 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-The Cloudflare Tunnel Operator manages Cloudflare Tunnels declaratively through a `CloudflareTunnel` CRD.
+Cloudflare Tunnel Operator manages Cloudflare Tunnels declaratively through the `CloudflareTunnel` CRD.
 
 ![Cloudflare Tunnel Operator Advantages](docusaurus/static/img/project-advantages.svg)
 
-## Overview
+## Quick Start
 
-This operator watches `CloudflareTunnel` resources and ensures:
+Prerequisites:
 
-- The target Cloudflare tunnel exists.
-- A Kubernetes Secret containing the tunnel token is created/updated.
-- Status (`tunnelID`, `observedGeneration`, and conditions) reflects current reconciliation state.
+- Kubernetes cluster access (`kubectl` configured)
+- A Cloudflare API Token with tunnel permissions
+- Cloudflare Account ID
 
-## Why This Project
-
-- Secret-first credential handling (`credentialsRef`) avoids plaintext tokens in CR manifests.
-- Automated tunnel token secret sync reduces manual operations and drift risk.
-- Finalizer-based lifecycle management keeps remote Cloudflare resources and Kubernetes state consistent.
-- Condition-driven status model improves observability and troubleshooting.
-- Built with Kubebuilder/controller-runtime patterns for production-friendly reconciliation and testing.
-
-## Credentials Model
-
-Cloudflare credentials are read from a Secret referenced by `spec.credentialsRef`.
-
-Required keys in the credentials Secret:
-
-- `api-token`
-- `account-id`
-
-Credentials are no longer accepted directly in CRD spec fields.
-
-## CRD Example
+1. Create a credentials Secret:
 
 ```yaml
 apiVersion: v1
@@ -45,7 +26,11 @@ type: Opaque
 stringData:
   api-token: <YOUR_CLOUDFLARE_API_TOKEN>
   account-id: <YOUR_CLOUDFLARE_ACCOUNT_ID>
----
+```
+
+2. Create a `CloudflareTunnel` resource:
+
+```yaml
 apiVersion: cloudflaretunnel.spotty.com.cn/v1alpha1
 kind: CloudflareTunnel
 metadata:
@@ -59,14 +44,39 @@ spec:
     name: my-tunnel-token
 ```
 
-## Reconcile Behavior
+3. Apply your manifest:
 
-- If the tunnel does not exist, the operator creates it.
-- The operator fetches tunnel token and syncs it to `spec.tokenSecretRef.name`.
-- If `tokenSecretRef` is omitted, default Secret name is `<CloudflareTunnel.metadata.name>-token`.
-- On delete, the operator removes the Cloudflare tunnel, then clears finalizer.
+```bash
+kubectl apply -f demo.yaml
+```
 
-## Deploy
+4. Verify tunnel status:
+
+```bash
+kubectl get cloudflaretunnel my-tunnel -n default -o yaml
+```
+
+## What It Does
+
+The operator watches `CloudflareTunnel` resources and ensures:
+
+- The target Cloudflare Tunnel exists.
+- A Kubernetes Secret containing the tunnel token is created or updated.
+- Status (`tunnelID`, `observedGeneration`, conditions) reflects reconciliation state.
+- Finalizers are used to clean up remote tunnel resources during deletion.
+
+## Credentials Model
+
+Cloudflare credentials are read from the Secret referenced by `spec.credentialsRef`.
+
+Required Secret keys:
+
+- `api-token`
+- `account-id`
+
+Credentials are not accepted directly in CRD spec fields.
+
+## Installation
 
 With Kustomize:
 
@@ -76,22 +86,19 @@ make docker-push IMG=<image:tag>
 make deploy IMG=<image:tag>
 ```
 
-For cross-platform image builds (multi-arch manifest), use:
+For multi-arch image build and push:
 
 ```bash
 make docker-buildx IMG=<image:tag>
 ```
 
-Default image platforms are `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`.
-You can override with `PLATFORMS=<platforms>`.
+Default image platforms:
 
-Apply your manifests:
+`linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`
 
-```bash
-kubectl apply -f demo.yaml
-```
+Override with `PLATFORMS=<platforms>`.
 
-With Helm (CRD auto-install via `crds/`):
+With Helm (CRDs auto-installed from `crds/`):
 
 ```bash
 helm install cloudflaretunnel-operator \
@@ -118,28 +125,22 @@ helm uninstall cloudflaretunnel-operator --namespace cloudflaretunnel-operator-s
 
 Note: CRDs installed from Helm `crds/` are not deleted by `helm uninstall`.
 
-## Testing
+## Development Commands
 
-- Unit/controller tests: `make test`
-- E2E tests: `make test-e2e`
+- Build manager binary: `make build`
+- Build cross-platform binaries: `make build-cross`
+- Run unit/controller tests: `make test`
+- Run e2e tests: `make test-e2e`
+- Run controller locally: `make run`
+- Install envtest assets: `make setup-envtest`
 
-## Cross-Platform Binaries
+Cross-platform binaries are written to `dist/<goos>-<goarch>/manager`.
 
-Build manager binaries for multiple platforms:
+Default binary platforms:
 
-```bash
-make build-cross
-```
+`linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`
 
-Artifacts are generated under `dist/<goos>-<goarch>/manager`.
-Default binary platforms are `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,darwin/arm64`.
-You can override with `BINARY_PLATFORMS=<platforms>`.
-
-For local controller tests, install envtest assets first:
-
-```bash
-make setup-envtest
-```
+Override with `BINARY_PLATFORMS=<platforms>`.
 
 ## Contributing
 
