@@ -102,7 +102,7 @@ With Helm (CRDs auto-installed from `crds/`):
 
 ```bash
 helm install cloudflaretunnel-operator \
-  oci://ghcr.io/<github-owner>/charts/cloudflaretunnel-operator \
+  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
   --version <x.y.z> \
   --namespace cloudflaretunnel-operator-system \
   --create-namespace
@@ -112,7 +112,7 @@ Upgrade:
 
 ```bash
 helm upgrade cloudflaretunnel-operator \
-  oci://ghcr.io/<github-owner>/charts/cloudflaretunnel-operator \
+  oci://ghcr.io/warjiang/charts/cloudflaretunnel-operator \
   --version <x.y.z> \
   --namespace cloudflaretunnel-operator-system
 ```
