@@ -50,3 +50,7 @@ tolerations: []
 affinity: {}
 
 extraArgs: []
+
+connectorDefaults:
+  image: cloudflare/cloudflared:2026.3.0
+  replicas: 1

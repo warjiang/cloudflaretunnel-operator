@@ -23,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,6 +68,8 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 		AfterEach(func() {
 			tokenSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-token", resourceName), Namespace: "default"}}
 			_ = k8sClient.Delete(ctx, tokenSecret)
+			connectorDeployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-connector", resourceName), Namespace: "default"}}
+			_ = k8sClient.Delete(ctx, connectorDeployment)
 
 			resource := &networkingv1alpha1.CloudflareTunnel{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
@@ -99,6 +102,11 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			tokenSecret := &corev1.Secret{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-resource-token", Namespace: "default"}, tokenSecret)).To(Succeed())
 			Expect(tokenSecret.Data).To(HaveKeyWithValue("token", []byte("test-token")))
+
+			connectorDeployment := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-resource-connector", Namespace: "default"}, connectorDeployment)).To(Succeed())
+			Expect(connectorDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2026.3.0"))
 
 			// Verify that the mock functions were called as expected
 			mockCloudflareClient.AssertExpectations(GinkgoT())

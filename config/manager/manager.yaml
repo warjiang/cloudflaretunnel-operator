@@ -63,6 +63,8 @@ spec:
         args:
           - --leader-elect
           - --health-probe-bind-address=:8081
+          - --connector-default-image=cloudflare/cloudflared:2026.3.0
+          - --connector-default-replicas=1
         image: cloudflaretunnel-operator:latest
         name: manager
         ports:

@@ -42,6 +42,9 @@ spec:
     name: cloudflare-credentials
   tokenSecretRef:
     name: my-tunnel-token
+  connector:
+    image: cloudflare/cloudflared:2026.3.0
+    replicas: 1
 ```
 
 3. 应用资源清单：
@@ -62,6 +65,7 @@ kubectl get cloudflaretunnel my-tunnel -n default -o yaml
 
 - 目标 Cloudflare Tunnel 存在。
 - 存放 Tunnel Token 的 Kubernetes Secret 被创建或更新。
+- 每个 CloudflareTunnel 都会创建一套独立的 cloudflared Deployment。
 - 状态字段（`tunnelID`、`observedGeneration`、conditions）反映当前对账结果。
 - 删除资源时通过 finalizer 清理云端 Tunnel。
 
