@@ -6,7 +6,12 @@
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- printf "%s-%s" .Release.Name (include "cloudflaretunnel-operator.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- $name := include "cloudflaretunnel-operator.name" . -}}
+{{- if or (eq .Release.Name $name) (hasPrefix (printf "%s-" .Release.Name) $name) -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 

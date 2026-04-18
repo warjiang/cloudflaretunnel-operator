@@ -48,6 +48,8 @@ spec:
         {{- else }}
         - --metrics-bind-address=0
         {{- end }}
+        - --connector-default-image={{ .Values.connectorDefaults.image }}
+        - --connector-default-replicas={{ .Values.connectorDefaults.replicas }}
         {{- with .Values.extraArgs }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

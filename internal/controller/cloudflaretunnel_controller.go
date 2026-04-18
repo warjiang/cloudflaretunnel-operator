@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -43,10 +44,14 @@ const (
 	conditionCredentialsReady = "CredentialsReady"
 	conditionTunnelReady      = "TunnelReady"
 	conditionTokenSecretReady = "TokenSecretReady"
+	conditionConnectorReady   = "ConnectorReady"
 
 	credentialsSecretKeyAPIToken  = "api-token"
 	credentialsSecretKeyAccountID = "account-id"
 	tunnelTokenSecretKey          = "token"
+
+	defaultConnectorImage    = "cloudflare/cloudflared:2026.3.0"
+	defaultConnectorReplicas = int32(1)
 )
 
 // CloudflareTunnelReconciler reconciles a CloudflareTunnel object
@@ -56,12 +61,17 @@ type CloudflareTunnelReconciler struct {
 	// CloudflareClient can be injected by tests. In production this should be nil,
 	// and the reconciler builds a client from credentialsRef on each reconcile.
 	CloudflareClient pkgcloudflare.ClientInterface
+
+	// Connector defaults used when spec.connector fields are omitted.
+	ConnectorDefaultImage    string
+	ConnectorDefaultReplicas int32
 }
 
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	tunnel := &networkingv1alpha1.CloudflareTunnel{}
 	if err := r.Get(ctx, req.NamespacedName, tunnel); err != nil {
@@ -127,12 +137,35 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 
 	if err := r.reconcileTokenSecret(ctx, tunnel, token); err != nil {
 		r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionFalse, "SecretSyncFailed", err.Error())
+		r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionFalse, "Pending", "Token secret is not ready")
 		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "SecretSyncFailed", err.Error())
 		_ = r.updateStatus(ctx, tunnel)
 		return ctrl.Result{}, err
 	}
 
 	r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionTrue, "SecretSynced", "Tunnel token secret is synced")
+
+	connectorDeployment, err := r.reconcileConnectorDeployment(ctx, tunnel)
+	if err != nil {
+		r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionFalse, "DeploymentSyncFailed", err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "DeploymentSyncFailed", err.Error())
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{}, err
+	}
+
+	if !isConnectorDeploymentReady(connectorDeployment) {
+		msg := fmt.Sprintf(
+			"Waiting for connector deployment: availableReplicas=%d, desiredReplicas=%d",
+			connectorDeployment.Status.AvailableReplicas,
+			connectorDeployment.Status.Replicas,
+		)
+		r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionFalse, "DeploymentNotReady", msg)
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "DeploymentNotReady", msg)
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionTrue, "DeploymentReady", "Connector deployment is ready")
 	r.setCondition(tunnel, conditionReady, metav1.ConditionTrue, "Ready", "Cloudflare tunnel is ready")
 
 	if err := r.updateStatus(ctx, tunnel); err != nil {
@@ -229,6 +262,109 @@ func (r *CloudflareTunnelReconciler) desiredTokenSecretName(tunnel *networkingv1
 	return fmt.Sprintf("%s-token", tunnel.Name)
 }
 
+func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(
+	ctx context.Context,
+	tunnel *networkingv1alpha1.CloudflareTunnel,
+) (*appsv1.Deployment, error) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      desiredConnectorDeploymentName(tunnel),
+			Namespace: tunnel.Namespace,
+		},
+	}
+
+	image := r.ConnectorDefaultImage
+	if image == "" {
+		image = defaultConnectorImage
+	}
+
+	replicas := r.ConnectorDefaultReplicas
+	if replicas <= 0 {
+		replicas = defaultConnectorReplicas
+	}
+
+	var resources corev1.ResourceRequirements
+	var nodeSelector map[string]string
+	var tolerations []corev1.Toleration
+	if tunnel.Spec.Connector != nil {
+		if tunnel.Spec.Connector.Image != "" {
+			image = tunnel.Spec.Connector.Image
+		}
+		if tunnel.Spec.Connector.Replicas != nil && *tunnel.Spec.Connector.Replicas > 0 {
+			replicas = *tunnel.Spec.Connector.Replicas
+		}
+		resources = tunnel.Spec.Connector.Resources
+		nodeSelector = tunnel.Spec.Connector.NodeSelector
+		tolerations = tunnel.Spec.Connector.Tolerations
+	}
+
+	labels := map[string]string{
+		"app.kubernetes.io/name":       "cloudflared",
+		"app.kubernetes.io/managed-by": "cloudflaretunnel-operator",
+		"app.kubernetes.io/instance":   tunnel.Name,
+		"cloudflaretunnel/name":        tunnel.Name,
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		deployment.Labels = labels
+		deployment.Spec.Replicas = &replicas
+		deployment.Spec.Selector = &metav1.LabelSelector{
+			MatchLabels: labels,
+		}
+		deployment.Spec.Template.Labels = labels
+		deployment.Spec.Template.Spec.Containers = []corev1.Container{
+			{
+				Name:            "cloudflared",
+				Image:           image,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Args: []string{
+					"tunnel",
+					"--no-autoupdate",
+					"run",
+					"--token",
+					"$(TUNNEL_TOKEN)",
+				},
+				Env: []corev1.EnvVar{
+					{
+						Name: "TUNNEL_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: r.desiredTokenSecretName(tunnel)},
+								Key:                  tunnelTokenSecretKey,
+							},
+						},
+					},
+				},
+				Resources: resources,
+			},
+		}
+		deployment.Spec.Template.Spec.NodeSelector = nodeSelector
+		deployment.Spec.Template.Spec.Tolerations = tolerations
+		return controllerutil.SetControllerReference(tunnel, deployment, r.Scheme)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.Get(ctx, client.ObjectKeyFromObject(deployment), deployment); err != nil {
+		return nil, err
+	}
+	return deployment, nil
+}
+
+func desiredConnectorDeploymentName(tunnel *networkingv1alpha1.CloudflareTunnel) string {
+	name := fmt.Sprintf("%s-connector", tunnel.Name)
+	if len(name) <= 63 {
+		return name
+	}
+	return strings.TrimSuffix(name[:63], "-")
+}
+
+func isConnectorDeploymentReady(deployment *appsv1.Deployment) bool {
+	return deployment.Status.ObservedGeneration >= deployment.Generation &&
+		deployment.Status.AvailableReplicas > 0
+}
+
 func (r *CloudflareTunnelReconciler) setCondition(
 	tunnel *networkingv1alpha1.CloudflareTunnel,
 	conditionType string,
@@ -256,6 +392,7 @@ func (r *CloudflareTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha1.CloudflareTunnel{}).
 		Owns(&corev1.Secret{}).
+		Owns(&appsv1.Deployment{}).
 		Named("cloudflaretunnel").
 		Complete(r)
 }

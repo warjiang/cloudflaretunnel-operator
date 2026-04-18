@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,6 +41,35 @@ type CloudflareTunnelSpec struct {
 	// If omitted, "<metadata.name>-token" is used.
 	// +optional
 	TokenSecretRef *TokenSecretRef `json:"tokenSecretRef,omitempty"`
+
+	// Connector defines how the cloudflared workload is run in Kubernetes.
+	// +optional
+	Connector *ConnectorSpec `json:"connector,omitempty"`
+}
+
+// ConnectorSpec defines the desired cloudflared workload configuration.
+type ConnectorSpec struct {
+	// Image is the cloudflared container image.
+	// If omitted, controller default image is used.
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// Replicas is the desired number of cloudflared pods for this tunnel.
+	// If omitted, controller default replicas is used.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Resources describes compute resource requirements.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// NodeSelector is a selector which must be true for the pod to fit on a node.
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Tolerations are attached to the cloudflared pod.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // CredentialsSecretRef references the Secret containing Cloudflare credentials.

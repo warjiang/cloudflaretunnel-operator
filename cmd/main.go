@@ -60,6 +60,8 @@ func main() {
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
 	var enableLeaderElection bool
+	var connectorDefaultImage string
+	var connectorDefaultReplicas int
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
@@ -69,6 +71,10 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&connectorDefaultImage, "connector-default-image", "cloudflare/cloudflared:2026.3.0",
+		"Default cloudflared connector image used when spec.connector.image is not set.")
+	flag.IntVar(&connectorDefaultReplicas, "connector-default-replicas", 1,
+		"Default cloudflared connector replicas used when spec.connector.replicas is not set.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
@@ -202,9 +208,11 @@ func main() {
 	}
 
 	if err = (&controller.CloudflareTunnelReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		CloudflareClient: nil,
+		Client:                   mgr.GetClient(),
+		Scheme:                   mgr.GetScheme(),
+		CloudflareClient:         nil,
+		ConnectorDefaultImage:    connectorDefaultImage,
+		ConnectorDefaultReplicas: int32(connectorDefaultReplicas),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CloudflareTunnel")
 		os.Exit(1)

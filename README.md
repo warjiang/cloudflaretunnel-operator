@@ -42,6 +42,9 @@ spec:
     name: cloudflare-credentials
   tokenSecretRef:
     name: my-tunnel-token
+  connector:
+    image: cloudflare/cloudflared:2026.3.0
+    replicas: 1
 ```
 
 3. Apply your manifest:
@@ -62,6 +65,7 @@ The operator watches `CloudflareTunnel` resources and ensures:
 
 - The target Cloudflare Tunnel exists.
 - A Kubernetes Secret containing the tunnel token is created or updated.
+- A dedicated cloudflared Deployment is created for each CloudflareTunnel.
 - Status (`tunnelID`, `observedGeneration`, conditions) reflects reconciliation state.
 - Finalizers are used to clean up remote tunnel resources during deletion.
 
