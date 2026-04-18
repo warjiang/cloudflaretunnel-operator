@@ -13,10 +13,10 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Clone the code
-        uses: actions/checkout@v4.2.0
+        uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5.2.0
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
