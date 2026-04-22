@@ -71,6 +71,7 @@ type CloudflareTunnelReconciler struct {
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	tunnel := &networkingv1alpha1.CloudflareTunnel{}
@@ -182,6 +183,14 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 		return ctrl.Result{}, nil
 	}
 
+	connectorStopped, err := r.ensureConnectorStoppedForDelete(ctx, tunnel)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !connectorStopped {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	cfClient, err := r.getCloudflareClient(ctx, tunnel)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -205,6 +214,50 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *CloudflareTunnelReconciler) ensureConnectorStoppedForDelete(
+	ctx context.Context,
+	tunnel *networkingv1alpha1.CloudflareTunnel,
+) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	deployment := &appsv1.Deployment{}
+	deploymentKey := client.ObjectKey{
+		Name:      desiredConnectorDeploymentName(tunnel),
+		Namespace: tunnel.Namespace,
+	}
+	if err := r.Get(ctx, deploymentKey, deployment); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, err
+		}
+	} else {
+		if deployment.DeletionTimestamp.IsZero() {
+			log.Info("Deleting connector deployment before tunnel cleanup", "deployment", deployment.Name)
+			if err := r.Delete(ctx, deployment); err != nil && !apierrors.IsNotFound(err) {
+				return false, err
+			}
+		}
+		// The deployment existed in this reconcile loop. Requeue to give the
+		// workload time to stop before deleting the Cloudflare tunnel.
+		return false, nil
+	}
+
+	labels := connectorLabels(tunnel)
+	if err := r.DeleteAllOf(ctx, &corev1.Pod{}, client.InNamespace(tunnel.Namespace), client.MatchingLabels(labels)); err != nil {
+		return false, err
+	}
+
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.InNamespace(tunnel.Namespace), client.MatchingLabels(labels)); err != nil {
+		return false, err
+	}
+	if len(podList.Items) > 0 {
+		log.Info("Waiting for connector pods to terminate before tunnel cleanup", "remainingPods", len(podList.Items))
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (r *CloudflareTunnelReconciler) getCloudflareClient(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (pkgcloudflare.ClientInterface, error) {
@@ -298,12 +351,7 @@ func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(
 		tolerations = tunnel.Spec.Connector.Tolerations
 	}
 
-	labels := map[string]string{
-		"app.kubernetes.io/name":       "cloudflared",
-		"app.kubernetes.io/managed-by": "cloudflaretunnel-operator",
-		"app.kubernetes.io/instance":   tunnel.Name,
-		"cloudflaretunnel/name":        tunnel.Name,
-	}
+	labels := connectorLabels(tunnel)
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Labels = labels
@@ -358,6 +406,15 @@ func desiredConnectorDeploymentName(tunnel *networkingv1alpha1.CloudflareTunnel)
 		return name
 	}
 	return strings.TrimSuffix(name[:63], "-")
+}
+
+func connectorLabels(tunnel *networkingv1alpha1.CloudflareTunnel) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "cloudflared",
+		"app.kubernetes.io/managed-by": "cloudflaretunnel-operator",
+		"app.kubernetes.io/instance":   tunnel.Name,
+		"cloudflaretunnel/name":        tunnel.Name,
+	}
 }
 
 func isConnectorDeploymentReady(deployment *appsv1.Deployment) bool {

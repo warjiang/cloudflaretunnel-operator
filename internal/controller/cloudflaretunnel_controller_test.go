@@ -23,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -73,6 +74,9 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 
 			resource := &networkingv1alpha1.CloudflareTunnel{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			if errors.IsNotFound(err) {
+				return
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance CloudflareTunnel")
@@ -109,6 +113,52 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2026.3.0"))
 
 			// Verify that the mock functions were called as expected
+			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
+
+		It("should delete connector pods before deleting tunnel", func() {
+			mockCloudflareClient := new(MockCloudflareClient)
+			controllerReconciler := &CloudflareTunnelReconciler{
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				CloudflareClient: mockCloudflareClient,
+			}
+
+			resource := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Finalizers = append(resource.Finalizers, finalizer)
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			resource.Status.TunnelID = "test-tunnel-id"
+			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+
+			labels := connectorLabels(resource)
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      desiredConnectorDeploymentName(resource),
+					Namespace: resource.Namespace,
+					Labels:    labels,
+				},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: labels},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "cloudflared", Image: "cloudflare/cloudflared:2026.3.0"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			mockCloudflareClient.AssertNotCalled(GinkgoT(), "DeleteTunnelByID", mock.Anything, "test-tunnel-id")
+
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(nil).Once()
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
 			mockCloudflareClient.AssertExpectations(GinkgoT())
 		})
 	})

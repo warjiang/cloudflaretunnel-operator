@@ -42,6 +42,9 @@ metadata:
     {{- include "cloudflaretunnel-operator.labels" . | nindent 4 }}
 rules:
 - apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["delete", "get", "list", "watch"]
+- apiGroups: [""]
   resources: ["secrets"]
   verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
 - apiGroups: ["apps"]
