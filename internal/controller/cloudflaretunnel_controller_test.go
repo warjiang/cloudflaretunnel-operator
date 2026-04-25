@@ -37,6 +37,7 @@ import (
 var _ = Describe("CloudflareTunnel Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
+		const tunnelID = "test-tunnel-id"
 
 		ctx := context.Background()
 
@@ -96,8 +97,8 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			// Mock the GetTunnelByName function to return a "not found" error,
 			// which will trigger the tunnel creation logic.
 			mockCloudflareClient.On("GetTunnelByName", ctx, "test-resource").Return(nil, fmt.Errorf("not found"))
-			mockCloudflareClient.On("CreateTunnel", ctx, "test-resource").Return(&cloudflare.Tunnel{ID: "test-tunnel-id"}, []byte("test-secret"), nil)
-			mockCloudflareClient.On("GetTunnelTokenByID", ctx, "test-tunnel-id").Return("test-token", nil)
+			mockCloudflareClient.On("CreateTunnel", ctx, "test-resource").Return(&cloudflare.Tunnel{ID: tunnelID}, []byte("test-secret"), nil)
+			mockCloudflareClient.On("GetTunnelTokenByID", ctx, tunnelID).Return("test-token", nil)
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -128,7 +129,7 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			resource.Finalizers = append(resource.Finalizers, finalizer)
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
-			resource.Status.TunnelID = "test-tunnel-id"
+			resource.Status.TunnelID = tunnelID
 			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
 
 			labels := connectorLabels(resource)
@@ -154,9 +155,9 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
-			mockCloudflareClient.AssertNotCalled(GinkgoT(), "DeleteTunnelByID", mock.Anything, "test-tunnel-id")
+			mockCloudflareClient.AssertNotCalled(GinkgoT(), "DeleteTunnelByID", mock.Anything, tunnelID)
 
-			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(nil).Once()
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, tunnelID).Return(nil).Once()
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			mockCloudflareClient.AssertExpectations(GinkgoT())
@@ -174,12 +175,12 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			resource.Finalizers = append(resource.Finalizers, finalizer)
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
-			resource.Status.TunnelID = "test-tunnel-id"
+			resource.Status.TunnelID = tunnelID
 			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
 
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
-			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(fmt.Errorf("conflict: tunnel has active connections")).Once()
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, tunnelID).Return(fmt.Errorf("conflict: tunnel has active connections")).Once()
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
@@ -189,7 +190,7 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resourceAfterFirstReconcile)).To(Succeed())
 			Expect(resourceAfterFirstReconcile.Finalizers).To(ContainElement(finalizer))
 
-			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(nil).Once()
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, tunnelID).Return(nil).Once()
 
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
@@ -217,12 +218,12 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			resource.Finalizers = append(resource.Finalizers, finalizer)
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
-			resource.Status.TunnelID = "test-tunnel-id"
+			resource.Status.TunnelID = tunnelID
 			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
 
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
-			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(fmt.Errorf("404 not found")).Once()
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, tunnelID).Return(fmt.Errorf("404 not found")).Once()
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
