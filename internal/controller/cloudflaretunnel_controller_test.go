@@ -161,5 +161,81 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			mockCloudflareClient.AssertExpectations(GinkgoT())
 		})
+
+		It("should requeue when cloudflare tunnel delete returns retryable error", func() {
+			mockCloudflareClient := new(MockCloudflareClient)
+			controllerReconciler := &CloudflareTunnelReconciler{
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				CloudflareClient: mockCloudflareClient,
+			}
+
+			resource := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Finalizers = append(resource.Finalizers, finalizer)
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			resource.Status.TunnelID = "test-tunnel-id"
+			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(fmt.Errorf("conflict: tunnel has active connections")).Once()
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(deleteRetryAfter))
+
+			resourceAfterFirstReconcile := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resourceAfterFirstReconcile)).To(Succeed())
+			Expect(resourceAfterFirstReconcile.Finalizers).To(ContainElement(finalizer))
+
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(nil).Once()
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			resourceAfterSecondReconcile := &networkingv1alpha1.CloudflareTunnel{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resourceAfterSecondReconcile)
+			if errors.IsNotFound(err) {
+				mockCloudflareClient.AssertExpectations(GinkgoT())
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resourceAfterSecondReconcile.Finalizers).NotTo(ContainElement(finalizer))
+			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
+
+		It("should treat not found as successful delete", func() {
+			mockCloudflareClient := new(MockCloudflareClient)
+			controllerReconciler := &CloudflareTunnelReconciler{
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				CloudflareClient: mockCloudflareClient,
+			}
+
+			resource := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Finalizers = append(resource.Finalizers, finalizer)
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			resource.Status.TunnelID = "test-tunnel-id"
+			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, "test-tunnel-id").Return(fmt.Errorf("404 not found")).Once()
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			resourceAfterReconcile := &networkingv1alpha1.CloudflareTunnel{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resourceAfterReconcile)
+			if errors.IsNotFound(err) {
+				mockCloudflareClient.AssertExpectations(GinkgoT())
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resourceAfterReconcile.Finalizers).NotTo(ContainElement(finalizer))
+			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
 	})
 })
