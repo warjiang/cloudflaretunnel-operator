@@ -52,6 +52,7 @@ const (
 
 	defaultConnectorImage    = "cloudflare/cloudflared:2026.3.0"
 	defaultConnectorReplicas = int32(1)
+	deleteRetryAfter         = 10 * time.Second
 )
 
 // CloudflareTunnelReconciler reconciles a CloudflareTunnel object
@@ -205,6 +206,10 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 		deleteErr = cfClient.DeleteTunnelByName(ctx, tunnel.Spec.Name)
 	}
 	if deleteErr != nil && !IsTunnelNotFoundError(deleteErr) {
+		if IsTunnelDeleteRetryableError(deleteErr) {
+			log.Info("Cloudflare tunnel delete returned retryable error, will retry", "error", deleteErr.Error(), "requeueAfter", deleteRetryAfter)
+			return ctrl.Result{RequeueAfter: deleteRetryAfter}, nil
+		}
 		return ctrl.Result{}, deleteErr
 	}
 
@@ -461,4 +466,27 @@ func IsTunnelNotFoundError(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "404")
+}
+
+// IsTunnelDeleteRetryableError checks whether a delete failure is transient and should be retried.
+func IsTunnelDeleteRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	retryablePatterns := []string{
+		"active connection",
+		"active connections",
+		"has connections",
+		"in use",
+		"conflict",
+		"409",
+		"temporarily unavailable",
+	}
+	for _, pattern := range retryablePatterns {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
+	}
+	return false
 }
