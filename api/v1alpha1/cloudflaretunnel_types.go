@@ -25,10 +25,17 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // CloudflareTunnelSpec defines the desired state of CloudflareTunnel.
+// +kubebuilder:validation:XValidation:rule="has(self.tunnelName) || has(self.name)",message="spec.tunnelName is required (legacy spec.name is still supported)"
 type CloudflareTunnelSpec struct {
-	// Name specifies the name of the Cloudflare tunnel.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	// TunnelName is the Cloudflare-side tunnel name used to create/query the tunnel.
+	// It is independent from Kubernetes metadata.name and does not need to match it.
+	// +optional
+	TunnelName string `json:"tunnelName,omitempty"`
+
+	// Name is deprecated, use tunnelName instead.
+	// Kept for backward compatibility with older manifests.
+	// +optional
+	Name string `json:"name,omitempty"`
 
 	// CredentialsRef points to a Secret that stores Cloudflare credentials.
 	// Required keys:
@@ -45,6 +52,46 @@ type CloudflareTunnelSpec struct {
 	// Connector defines how the cloudflared workload is run in Kubernetes.
 	// +optional
 	Connector *ConnectorSpec `json:"connector,omitempty"`
+
+	// Ingress defines traffic forwarding rules for cloudflared.
+	// Rules are evaluated in order.
+	// +optional
+	Ingress *IngressSpec `json:"ingress,omitempty"`
+}
+
+// IngressSpec defines ingress-like traffic forwarding rules.
+type IngressSpec struct {
+	// Rules defines path to service forwarding rules.
+	// +kubebuilder:validation:MinItems=1
+	Rules []IngressRule `json:"rules"`
+}
+
+// IngressRule defines one forwarding rule.
+type IngressRule struct {
+	// Path is a URL path prefix. If set, it must start with "/".
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// Service is the Kubernetes Service backend in the same namespace.
+	Service IngressServiceBackend `json:"service"`
+}
+
+// IngressServiceBackend references a Kubernetes Service backend.
+type IngressServiceBackend struct {
+	// Name is the Kubernetes Service name.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace is the Service namespace.
+	// If omitted, the CloudflareTunnel namespace is used.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace,omitempty"`
+
+	// Port is the Service port number.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
 }
 
 // ConnectorSpec defines the desired cloudflared workload configuration.
@@ -91,6 +138,11 @@ type CloudflareTunnelStatus struct {
 	// TunnelID is the unique identifier of the Cloudflare tunnel.
 	// +optional
 	TunnelID string `json:"tunnelID,omitempty"`
+
+	// TokenSecretName is the actual Secret name where the tunnel token is stored.
+	// When spec.tokenSecretRef is omitted, it defaults to "<metadata.name>-token".
+	// +optional
+	TokenSecretName string `json:"tokenSecretName,omitempty"`
 
 	// Conditions represent the latest available observations of a CloudflareTunnel's state.
 	// +optional

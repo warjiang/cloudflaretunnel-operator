@@ -70,6 +70,8 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 		AfterEach(func() {
 			tokenSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-token", resourceName), Namespace: "default"}}
 			_ = k8sClient.Delete(ctx, tokenSecret)
+			connectorConfigMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-connector-config", resourceName), Namespace: "default"}}
+			_ = k8sClient.Delete(ctx, connectorConfigMap)
 			connectorDeployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-connector", resourceName), Namespace: "default"}}
 			_ = k8sClient.Delete(ctx, connectorDeployment)
 
@@ -114,6 +116,81 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2026.3.0"))
 
 			// Verify that the mock functions were called as expected
+			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
+
+		It("should reconcile ingress rules into configmap and deployment args", func() {
+			mockCloudflareClient := new(MockCloudflareClient)
+			controllerReconciler := &CloudflareTunnelReconciler{
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				CloudflareClient: mockCloudflareClient,
+			}
+
+			ingressResourceName := "test-ingress-resource"
+			ingressNamespacedName := types.NamespacedName{
+				Name:      ingressResourceName,
+				Namespace: "default",
+			}
+			resource := &networkingv1alpha1.CloudflareTunnel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ingressResourceName,
+					Namespace: "default",
+				},
+				Spec: networkingv1alpha1.CloudflareTunnelSpec{
+					Name: ingressResourceName,
+					CredentialsRef: networkingv1alpha1.CredentialsSecretRef{
+						Name: "cloudflare-credentials",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			resource.Spec.Ingress = &networkingv1alpha1.IngressSpec{
+				Rules: []networkingv1alpha1.IngressRule{
+					{
+						Path: "/api",
+						Service: networkingv1alpha1.IngressServiceBackend{
+							Name:      "backend-svc",
+							Namespace: "backend-ns",
+							Port:      8080,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, resource)
+				_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-token", ingressResourceName), Namespace: "default"}})
+				_ = k8sClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-connector-config", ingressResourceName), Namespace: "default"}})
+				_ = k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-connector", ingressResourceName), Namespace: "default"}})
+			}()
+
+			mockCloudflareClient.On("GetTunnelByName", ctx, ingressResourceName).Return(nil, fmt.Errorf("not found"))
+			mockCloudflareClient.On("CreateTunnel", ctx, ingressResourceName).Return(&cloudflare.Tunnel{ID: tunnelID}, []byte("test-secret"), nil)
+			mockCloudflareClient.On("GetTunnelTokenByID", ctx, tunnelID).Return("test-token", nil)
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: ingressNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			connectorConfigMap := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-ingress-resource-connector-config", Namespace: "default"}, connectorConfigMap)).To(Succeed())
+			Expect(connectorConfigMap.Data).To(HaveKey(connectorConfigFileName))
+			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("path: ^/api(/.*)?$"))
+			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("service: http://backend-svc.backend-ns.svc.cluster.local:8080"))
+			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("service: http_status:404"))
+
+			connectorDeployment := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-ingress-resource-connector", Namespace: "default"}, connectorDeployment)).To(Succeed())
+			Expect(connectorDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--config"))
+			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].Args).To(ContainElement("/etc/cloudflared/config/config.yaml"))
+			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
+			Expect(connectorDeployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
+			Expect(connectorDeployment.Spec.Template.Spec.Volumes[0].ConfigMap).NotTo(BeNil())
+			Expect(connectorDeployment.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("test-ingress-resource-connector-config"))
+
 			mockCloudflareClient.AssertExpectations(GinkgoT())
 		})
 

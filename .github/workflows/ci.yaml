@@ -43,7 +43,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.2.0
 
+      - name: Set build variables
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+            echo "enable_qemu=false" >> "$GITHUB_OUTPUT"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+            echo "enable_qemu=true" >> "$GITHUB_OUTPUT"
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up QEMU
+        if: steps.vars.outputs.enable_qemu == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -76,10 +90,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ steps.vars.outputs.platforms }}
+          push: ${{ steps.vars.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   helm-publish:
     if: startsWith(github.ref, 'refs/tags/v')

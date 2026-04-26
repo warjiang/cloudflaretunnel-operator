@@ -15,11 +15,16 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cloudflaretunnel-sample
 spec:
-  name: createbycr
+  tunnelName: createbycr
   credentialsRef:
     name: cloudflare-credentials
-  tokenSecretRef:
-    name: cloudflaretunnel-sample-token
+  ingress:
+    rules:
+      - path: /api
+        service:
+          name: demo-backend
+          namespace: demo
+          port: 8080
   connector:
     image: cloudflare/cloudflared:2026.3.0
     replicas: 1
