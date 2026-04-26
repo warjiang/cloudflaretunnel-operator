@@ -9,8 +9,6 @@ spec:
   tunnelName: my-first-tunnel
   credentialsRef:
     name: cloudflare-credentials
-  tokenSecretRef:
-    name: cloudflaretunnel-sample-token
   connector:
     image: cloudflare/cloudflared:2026.3.0
     replicas: 1

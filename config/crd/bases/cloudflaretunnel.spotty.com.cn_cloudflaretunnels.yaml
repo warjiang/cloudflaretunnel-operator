@@ -269,6 +269,11 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              tokenSecretName:
+                description: |-
+                  TokenSecretName is the actual Secret name where the tunnel token is stored.
+                  When spec.tokenSecretRef is omitted, it defaults to "<metadata.name>-token".
+                type: string
               tunnelID:
                 description: TunnelID is the unique identifier of the Cloudflare tunnel.
                 type: string

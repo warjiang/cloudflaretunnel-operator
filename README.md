@@ -40,8 +40,6 @@ spec:
   tunnelName: my-first-tunnel
   credentialsRef:
     name: cloudflare-credentials
-  tokenSecretRef:
-    name: my-tunnel-token
   connector:
     image: cloudflare/cloudflared:2026.3.0
     replicas: 1
@@ -59,6 +57,8 @@ kubectl apply -f demo.yaml
 kubectl get cloudflaretunnel my-tunnel -n default -o yaml
 ```
 
+If `spec.tokenSecretRef` is omitted, the operator stores token in `${metadata.name}-token` by default and reports the actual Secret name in `status.tokenSecretName`.
+
 ## What It Does
 
 The operator watches `CloudflareTunnel` resources and ensures:
@@ -66,7 +66,7 @@ The operator watches `CloudflareTunnel` resources and ensures:
 - The target Cloudflare Tunnel exists.
 - A Kubernetes Secret containing the tunnel token is created or updated.
 - A dedicated cloudflared Deployment is created for each CloudflareTunnel.
-- Status (`tunnelID`, `observedGeneration`, conditions) reflects reconciliation state.
+- Status (`tunnelID`, `tokenSecretName`, `observedGeneration`, conditions) reflects reconciliation state.
 - Finalizers are used to clean up remote tunnel resources during deletion.
 
 ## Credentials Model

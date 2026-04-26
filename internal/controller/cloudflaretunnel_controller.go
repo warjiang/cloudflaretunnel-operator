@@ -144,7 +144,8 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileTokenSecret(ctx, tunnel, token); err != nil {
+	tokenSecretName, err := r.reconcileTokenSecret(ctx, tunnel, token)
+	if err != nil {
 		r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionFalse, "SecretSyncFailed", err.Error())
 		r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionFalse, "Pending", "Token secret is not ready")
 		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "SecretSyncFailed", err.Error())
@@ -152,6 +153,7 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 		return ctrl.Result{}, err
 	}
 
+	tunnel.Status.TokenSecretName = tokenSecretName
 	r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionTrue, "SecretSynced", "Tunnel token secret is synced")
 
 	connectorDeployment, err := r.reconcileConnectorDeployment(ctx, tunnel)
@@ -309,7 +311,7 @@ func (r *CloudflareTunnelReconciler) getCloudflareClient(ctx context.Context, tu
 	)
 }
 
-func (r *CloudflareTunnelReconciler) reconcileTokenSecret(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel, token string) error {
+func (r *CloudflareTunnelReconciler) reconcileTokenSecret(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel, token string) (string, error) {
 	secretName := r.desiredTokenSecretName(tunnel)
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: tunnel.Namespace}}
 
@@ -321,7 +323,10 @@ func (r *CloudflareTunnelReconciler) reconcileTokenSecret(ctx context.Context, t
 		secret.Type = corev1.SecretTypeOpaque
 		return controllerutil.SetControllerReference(tunnel, secret, r.Scheme)
 	})
-	return err
+	if err != nil {
+		return "", err
+	}
+	return secretName, nil
 }
 
 func (r *CloudflareTunnelReconciler) desiredTokenSecretName(tunnel *networkingv1alpha1.CloudflareTunnel) string {

@@ -99,6 +99,11 @@ type CloudflareTunnelStatus struct {
 	// +optional
 	TunnelID string `json:"tunnelID,omitempty"`
 
+	// TokenSecretName is the actual Secret name where the tunnel token is stored.
+	// When spec.tokenSecretRef is omitted, it defaults to "<metadata.name>-token".
+	// +optional
+	TokenSecretName string `json:"tokenSecretName,omitempty"`
+
 	// Conditions represent the latest available observations of a CloudflareTunnel's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
