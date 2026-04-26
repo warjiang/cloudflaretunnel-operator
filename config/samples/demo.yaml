@@ -16,6 +16,8 @@ metadata:
   name: cloudflaretunnel-sample
 spec:
   tunnelName: createbycr
+  hostname: app.example.com
+  zoneID: "<YOUR_CLOUDFLARE_ZONE_ID>"
   credentialsRef:
     name: cloudflare-credentials
   ingress:

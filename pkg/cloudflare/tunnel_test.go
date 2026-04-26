@@ -218,3 +218,49 @@ func TestGetTunnelTokenByName(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "test-token", token)
 }
+
+func TestUpsertTunnelConfiguration(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPut, r.Method, "Expected method 'PUT'")
+		assert.Equal(t, "/accounts/mock_account_id/cfd_tunnel/test-tunnel-id/configurations", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"success":true,
+			"errors":[],
+			"messages":[],
+			"result":{"tunnel_id":"test-tunnel-id","config":{"ingress":[{"hostname":"app.example.com","service":"http://svc.default.svc.cluster.local:8080"}]}}
+		}`)
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	err := client.UpsertTunnelConfiguration(context.Background(), "test-tunnel-id", []TunnelIngressRule{
+		{
+			Hostname: "app.example.com",
+			Service:  "http://svc.default.svc.cluster.local:8080",
+		},
+	})
+	assert.NoError(t, err)
+}
+
+func TestEnsureCNAMERecordCreate(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/zones/zone-id/dns_records":
+			_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[],"result_info":{"page":1,"per_page":100,"count":0,"total_count":0}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/zones/zone-id/dns_records":
+			_, _ = fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":{"id":"dns-record-id","type":"CNAME","name":"app.example.com","content":"test-tunnel-id.cfargotunnel.com","proxied":true}}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	client, teardown := setupTest(t, handler)
+	defer teardown()
+
+	recordID, err := client.EnsureCNAMERecord(context.Background(), "zone-id", "app.example.com", "test-tunnel-id.cfargotunnel.com")
+	assert.NoError(t, err)
+	assert.Equal(t, "dns-record-id", recordID)
+}

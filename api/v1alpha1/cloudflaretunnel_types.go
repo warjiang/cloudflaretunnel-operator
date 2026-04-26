@@ -26,6 +26,7 @@ import (
 
 // CloudflareTunnelSpec defines the desired state of CloudflareTunnel.
 // +kubebuilder:validation:XValidation:rule="has(self.tunnelName) || has(self.name)",message="spec.tunnelName is required (legacy spec.name is still supported)"
+// +kubebuilder:validation:XValidation:rule="!has(self.ingress) || (has(self.hostname) && has(self.zoneID))",message="spec.hostname and spec.zoneID are required when spec.ingress is set"
 type CloudflareTunnelSpec struct {
 	// TunnelName is the Cloudflare-side tunnel name used to create/query the tunnel.
 	// It is independent from Kubernetes metadata.name and does not need to match it.
@@ -57,6 +58,19 @@ type CloudflareTunnelSpec struct {
 	// Rules are evaluated in order.
 	// +optional
 	Ingress *IngressSpec `json:"ingress,omitempty"`
+
+	// Hostname is the public DNS name used to expose this tunnel.
+	// Required when ingress rules are set.
+	// Example: app.example.com
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Hostname string `json:"hostname,omitempty"`
+
+	// ZoneID is the Cloudflare Zone ID where hostname DNS record is managed.
+	// Required when ingress rules are set.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	ZoneID string `json:"zoneID,omitempty"`
 }
 
 // IngressSpec defines ingress-like traffic forwarding rules.
@@ -143,6 +157,10 @@ type CloudflareTunnelStatus struct {
 	// When spec.tokenSecretRef is omitted, it defaults to "<metadata.name>-token".
 	// +optional
 	TokenSecretName string `json:"tokenSecretName,omitempty"`
+
+	// DNSRecordID is the Cloudflare DNS record ID managed for spec.hostname.
+	// +optional
+	DNSRecordID string `json:"dnsRecordID,omitempty"`
 
 	// Conditions represent the latest available observations of a CloudflareTunnel's state.
 	// +optional

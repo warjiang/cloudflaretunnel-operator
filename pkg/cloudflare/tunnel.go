@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	"github.com/cloudflare/cloudflare-go"
 )
@@ -18,6 +19,16 @@ type ClientInterface interface {
 	ListTunnels(ctx context.Context) ([]cloudflare.Tunnel, error)
 	GetTunnelTokenByID(ctx context.Context, tunnelID string) (string, error)
 	GetTunnelTokenByName(ctx context.Context, name string) (string, error)
+	UpsertTunnelConfiguration(ctx context.Context, tunnelID string, rules []TunnelIngressRule) error
+	EnsureCNAMERecord(ctx context.Context, zoneID, hostname, target string) (string, error)
+	DeleteDNSRecordByID(ctx context.Context, zoneID, recordID string) error
+}
+
+// TunnelIngressRule is a high-level tunnel ingress entry managed by the operator.
+type TunnelIngressRule struct {
+	Hostname string
+	Path     string
+	Service  string
 }
 
 // Client is a wrapper around the Cloudflare API client.
@@ -155,4 +166,102 @@ func (c *Client) GetTunnelTokenByName(ctx context.Context, name string) (string,
 		return "", err
 	}
 	return c.GetTunnelTokenByID(ctx, tunnel.ID)
+}
+
+// UpsertTunnelConfiguration creates or updates the remotely-managed tunnel ingress configuration.
+func (c *Client) UpsertTunnelConfiguration(ctx context.Context, tunnelID string, rules []TunnelIngressRule) error {
+	if tunnelID == "" {
+		return fmt.Errorf("tunnelID is required")
+	}
+	if len(rules) == 0 {
+		return fmt.Errorf("at least one ingress rule is required")
+	}
+
+	ingress := make([]cloudflare.UnvalidatedIngressRule, 0, len(rules))
+	for _, rule := range rules {
+		ingress = append(ingress, cloudflare.UnvalidatedIngressRule{
+			Hostname: rule.Hostname,
+			Path:     rule.Path,
+			Service:  rule.Service,
+		})
+	}
+
+	rc := cloudflare.AccountIdentifier(c.accountID)
+	_, err := c.api.UpdateTunnelConfiguration(ctx, rc, cloudflare.TunnelConfigurationParams{
+		TunnelID: tunnelID,
+		Config: cloudflare.TunnelConfiguration{
+			Ingress: ingress,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update tunnel configuration: %w", err)
+	}
+	return nil
+}
+
+// EnsureCNAMERecord creates or updates a CNAME record for a hostname.
+func (c *Client) EnsureCNAMERecord(ctx context.Context, zoneID, hostname, target string) (string, error) {
+	if zoneID == "" {
+		return "", fmt.Errorf("zoneID is required")
+	}
+	if hostname == "" {
+		return "", fmt.Errorf("hostname is required")
+	}
+	if target == "" {
+		return "", fmt.Errorf("target is required")
+	}
+
+	normalizedTarget := strings.TrimSuffix(target, ".")
+	proxied := true
+	rc := cloudflare.ZoneIdentifier(zoneID)
+	records, _, err := c.api.ListDNSRecords(ctx, rc, cloudflare.ListDNSRecordsParams{
+		Type: "CNAME",
+		Name: hostname,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list dns records: %w", err)
+	}
+
+	for _, record := range records {
+		if strings.EqualFold(record.Name, hostname) && strings.EqualFold(record.Type, "CNAME") {
+			if strings.EqualFold(strings.TrimSuffix(record.Content, "."), normalizedTarget) && record.Proxied != nil && *record.Proxied {
+				return record.ID, nil
+			}
+			updated, updateErr := c.api.UpdateDNSRecord(ctx, rc, cloudflare.UpdateDNSRecordParams{
+				ID:      record.ID,
+				Type:    "CNAME",
+				Name:    hostname,
+				Content: normalizedTarget,
+				Proxied: &proxied,
+				TTL:     1,
+			})
+			if updateErr != nil {
+				return "", fmt.Errorf("failed to update dns record: %w", updateErr)
+			}
+			return updated.ID, nil
+		}
+	}
+
+	created, err := c.api.CreateDNSRecord(ctx, rc, cloudflare.CreateDNSRecordParams{
+		Type:    "CNAME",
+		Name:    hostname,
+		Content: normalizedTarget,
+		Proxied: &proxied,
+		TTL:     1,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to create dns record: %w", err)
+	}
+	return created.ID, nil
+}
+
+// DeleteDNSRecordByID deletes a DNS record by zone and record ID.
+func (c *Client) DeleteDNSRecordByID(ctx context.Context, zoneID, recordID string) error {
+	if zoneID == "" || recordID == "" {
+		return nil
+	}
+	if err := c.api.DeleteDNSRecord(ctx, cloudflare.ZoneIdentifier(zoneID), recordID); err != nil {
+		return fmt.Errorf("failed to delete dns record: %w", err)
+	}
+	return nil
 }

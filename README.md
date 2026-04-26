@@ -38,6 +38,8 @@ metadata:
   namespace: default
 spec:
   tunnelName: my-first-tunnel
+  hostname: app.example.com
+  zoneID: <YOUR_CLOUDFLARE_ZONE_ID>
   credentialsRef:
     name: cloudflare-credentials
   ingress:
@@ -71,6 +73,7 @@ If `spec.tokenSecretRef` is omitted, the operator stores token in `${metadata.na
 The operator watches `CloudflareTunnel` resources and ensures:
 
 - The target Cloudflare Tunnel exists.
+- Public hostname routing is configured in Cloudflare Tunnel and DNS CNAME points to `<tunnel-id>.cfargotunnel.com`.
 - A Kubernetes Secret containing the tunnel token is created or updated.
 - A dedicated cloudflared Deployment is created for each CloudflareTunnel.
 - Optional ingress-style path forwarding rules are rendered into cloudflared config.

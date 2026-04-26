@@ -31,6 +31,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -48,6 +49,7 @@ const (
 	conditionTunnelReady      = "TunnelReady"
 	conditionTokenSecretReady = "TokenSecretReady"
 	conditionConnectorReady   = "ConnectorReady"
+	conditionRoutingReady     = "RoutingReady"
 
 	credentialsSecretKeyAPIToken  = "api-token"
 	credentialsSecretKeyAccountID = "account-id"
@@ -59,6 +61,8 @@ const (
 	defaultConnectorReplicas = int32(1)
 	deleteRetryAfter         = 10 * time.Second
 )
+
+var errCredentialsSecretNotFound = errors.New("credentials secret not found")
 
 // CloudflareTunnelReconciler reconciles a CloudflareTunnel object
 type CloudflareTunnelReconciler struct {
@@ -93,7 +97,14 @@ func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !controllerutil.ContainsFinalizer(tunnel, finalizer) {
 		controllerutil.AddFinalizer(tunnel, finalizer)
 		if err := r.Update(ctx, tunnel); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
+		}
+		// Continue reconcile with the latest resourceVersion to avoid update conflicts.
+		if err := r.Get(ctx, req.NamespacedName, tunnel); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 	}
 
@@ -141,6 +152,25 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 
 	tunnel.Status.TunnelID = cfTunnel.ID
 	r.setCondition(tunnel, conditionTunnelReady, metav1.ConditionTrue, "TunnelReady", "Tunnel exists")
+
+	dnsRecordID, err := r.reconcilePublishedRouting(ctx, tunnel, cfClient, cfTunnel.ID)
+	if err != nil {
+		var invalidIngressErr ingressValidationError
+		reason := "RoutingSyncFailed"
+		if errors.As(err, &invalidIngressErr) {
+			reason = "RoutingConfigInvalid"
+		}
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionFalse, reason, err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, reason, err.Error())
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{}, nil
+	}
+	tunnel.Status.DNSRecordID = dnsRecordID
+	if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Public hostname routing is configured")
+	} else {
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
+	}
 
 	token, err := cfClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
 	if err != nil {
@@ -226,7 +256,20 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 
 	cfClient, err := r.getCloudflareClient(ctx, tunnel)
 	if err != nil {
+		if errors.Is(err, errCredentialsSecretNotFound) {
+			log.Info("Credentials secret not found during deletion; skipping Cloudflare tunnel cleanup", "secret", tunnel.Spec.CredentialsRef.Name)
+			if updateErr := r.removeFinalizerWithRetry(ctx, client.ObjectKeyFromObject(tunnel)); updateErr != nil {
+				return ctrl.Result{}, updateErr
+			}
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
+	}
+
+	if tunnel.Status.DNSRecordID != "" && tunnel.Spec.ZoneID != "" {
+		if err := cfClient.DeleteDNSRecordByID(ctx, tunnel.Spec.ZoneID, tunnel.Status.DNSRecordID); err != nil && !IsDNSRecordNotFoundError(err) {
+			return ctrl.Result{}, err
+		}
 	}
 
 	deleteErr := error(nil)
@@ -245,8 +288,7 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 		return ctrl.Result{}, deleteErr
 	}
 
-	controllerutil.RemoveFinalizer(tunnel, finalizer)
-	if err := r.Update(ctx, tunnel); err != nil {
+	if err := r.removeFinalizerWithRetry(ctx, client.ObjectKeyFromObject(tunnel)); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -310,7 +352,7 @@ func (r *CloudflareTunnelReconciler) getCloudflareClient(ctx context.Context, tu
 	credentialsSecret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{Name: credentialsRefName, Namespace: tunnel.Namespace}, credentialsSecret); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("credentials secret %q not found", credentialsRefName)
+			return nil, fmt.Errorf("%w: %q", errCredentialsSecretNotFound, credentialsRefName)
 		}
 		return nil, err
 	}
@@ -378,8 +420,9 @@ type cloudflaredIngressConfig struct {
 }
 
 type cloudflaredIngressRule struct {
-	Path    string `yaml:"path,omitempty"`
-	Service string `yaml:"service"`
+	Hostname string `yaml:"hostname,omitempty"`
+	Path     string `yaml:"path,omitempty"`
+	Service  string `yaml:"service"`
 }
 
 func (r *CloudflareTunnelReconciler) reconcileConnectorConfigMap(
@@ -437,6 +480,9 @@ func (r *CloudflareTunnelReconciler) buildCloudflaredIngressConfig(
 		Ingress: make([]cloudflaredIngressRule, 0, len(tunnel.Spec.Ingress.Rules)+1),
 	}
 	for i, rule := range tunnel.Spec.Ingress.Rules {
+		if tunnel.Spec.Hostname == "" {
+			return "", true, ingressValidationError{msg: "spec.hostname is required when spec.ingress is set"}
+		}
 		if rule.Service.Name == "" {
 			return "", true, ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.name is required", i)}
 		}
@@ -455,14 +501,18 @@ func (r *CloudflareTunnelReconciler) buildCloudflaredIngressConfig(
 		}
 
 		entry := cloudflaredIngressRule{
-			Service: fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", rule.Service.Name, backendNamespace, rule.Service.Port),
+			Hostname: tunnel.Spec.Hostname,
+			Service:  fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", rule.Service.Name, backendNamespace, rule.Service.Port),
 		}
 		if regexPath != "" {
 			entry.Path = regexPath
 		}
 		config.Ingress = append(config.Ingress, entry)
 	}
-	config.Ingress = append(config.Ingress, cloudflaredIngressRule{Service: "http_status:404"})
+	config.Ingress = append(config.Ingress, cloudflaredIngressRule{
+		Hostname: tunnel.Spec.Hostname,
+		Service:  "http_status:404",
+	})
 
 	raw, err := yaml.Marshal(config)
 	if err != nil {
@@ -483,6 +533,64 @@ func ingressPrefixToRegex(path string) (string, error) {
 		return "^/.*$", nil
 	}
 	return fmt.Sprintf("^%s(/.*)?$", regexp.QuoteMeta(trimmed)), nil
+}
+
+func (r *CloudflareTunnelReconciler) reconcilePublishedRouting(
+	ctx context.Context,
+	tunnel *networkingv1alpha1.CloudflareTunnel,
+	cfClient pkgcloudflare.ClientInterface,
+	tunnelID string,
+) (string, error) {
+	if tunnel.Spec.Ingress == nil || len(tunnel.Spec.Ingress.Rules) == 0 {
+		if tunnel.Status.DNSRecordID != "" && tunnel.Spec.ZoneID != "" {
+			if err := cfClient.DeleteDNSRecordByID(ctx, tunnel.Spec.ZoneID, tunnel.Status.DNSRecordID); err != nil && !IsDNSRecordNotFoundError(err) {
+				return tunnel.Status.DNSRecordID, err
+			}
+		}
+		return "", nil
+	}
+	if tunnel.Spec.Hostname == "" {
+		return "", ingressValidationError{msg: "spec.hostname is required when spec.ingress is set"}
+	}
+	if tunnel.Spec.ZoneID == "" {
+		return "", ingressValidationError{msg: "spec.zoneID is required when spec.ingress is set"}
+	}
+
+	rules := make([]pkgcloudflare.TunnelIngressRule, 0, len(tunnel.Spec.Ingress.Rules)+1)
+	for i, rule := range tunnel.Spec.Ingress.Rules {
+		if rule.Service.Name == "" {
+			return "", ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.name is required", i)}
+		}
+		if rule.Service.Port < 1 || rule.Service.Port > 65535 {
+			return "", ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.port must be between 1 and 65535", i)}
+		}
+
+		regexPath, err := ingressPrefixToRegex(rule.Path)
+		if err != nil {
+			return "", ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].path: %s", i, err.Error())}
+		}
+
+		backendNamespace := tunnel.Namespace
+		if rule.Service.Namespace != "" {
+			backendNamespace = rule.Service.Namespace
+		}
+		rules = append(rules, pkgcloudflare.TunnelIngressRule{
+			Hostname: tunnel.Spec.Hostname,
+			Path:     regexPath,
+			Service:  fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", rule.Service.Name, backendNamespace, rule.Service.Port),
+		})
+	}
+	rules = append(rules, pkgcloudflare.TunnelIngressRule{
+		Hostname: tunnel.Spec.Hostname,
+		Service:  "http_status:404",
+	})
+
+	if err := cfClient.UpsertTunnelConfiguration(ctx, tunnelID, rules); err != nil {
+		return "", err
+	}
+
+	dnsTarget := fmt.Sprintf("%s.cfargotunnel.com", tunnelID)
+	return cfClient.EnsureCNAMERecord(ctx, tunnel.Spec.ZoneID, tunnel.Spec.Hostname, dnsTarget)
 }
 
 func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(
@@ -643,8 +751,38 @@ func (r *CloudflareTunnelReconciler) setCondition(
 }
 
 func (r *CloudflareTunnelReconciler) updateStatus(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) error {
-	tunnel.Status.ObservedGeneration = tunnel.Generation
-	return r.Status().Update(ctx, tunnel)
+	desiredStatus := tunnel.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &networkingv1alpha1.CloudflareTunnel{}
+		if err := r.Get(ctx, client.ObjectKeyFromObject(tunnel), latest); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+
+		latest.Status = desiredStatus
+		latest.Status.ObservedGeneration = latest.Generation
+		return r.Status().Update(ctx, latest)
+	})
+}
+
+func (r *CloudflareTunnelReconciler) removeFinalizerWithRetry(ctx context.Context, key client.ObjectKey) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &networkingv1alpha1.CloudflareTunnel{}
+		if err := r.Get(ctx, key, latest); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+
+		if !controllerutil.ContainsFinalizer(latest, finalizer) {
+			return nil
+		}
+		controllerutil.RemoveFinalizer(latest, finalizer)
+		return r.Update(ctx, latest)
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -665,6 +803,15 @@ func IsTunnelNotFoundError(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "404")
+}
+
+// IsDNSRecordNotFoundError checks if the error is a DNS record not found error.
+func IsDNSRecordNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "81044")
 }
 
 // IsTunnelDeleteRetryableError checks whether a delete failure is transient and should be retried.
