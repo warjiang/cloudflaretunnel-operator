@@ -10,6 +10,7 @@ rules:
   - pods
   verbs:
   - delete
+  - deletecollection
   - get
   - list
   - watch
