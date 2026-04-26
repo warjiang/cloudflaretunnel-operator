@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cloudflaretunnel-sample
 spec:
-  name: my-first-tunnel
+  tunnelName: my-first-tunnel
   credentialsRef:
     name: cloudflare-credentials
   tokenSecretRef:

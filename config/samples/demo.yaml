@@ -15,7 +15,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cloudflaretunnel-sample
 spec:
-  name: createbycr
+  tunnelName: createbycr
   credentialsRef:
     name: cloudflare-credentials
   tokenSecretRef:

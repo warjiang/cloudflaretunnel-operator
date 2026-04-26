@@ -37,7 +37,7 @@ metadata:
   name: my-tunnel
   namespace: default
 spec:
-  name: my-first-tunnel
+  tunnelName: my-first-tunnel
   credentialsRef:
     name: cloudflare-credentials
   tokenSecretRef:

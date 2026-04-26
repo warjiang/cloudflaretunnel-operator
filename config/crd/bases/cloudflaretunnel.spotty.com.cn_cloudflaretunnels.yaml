@@ -175,7 +175,9 @@ spec:
                 - name
                 type: object
               name:
-                description: Name specifies the name of the Cloudflare tunnel.
+                description: |-
+                  Name is deprecated, use tunnelName instead.
+                  Kept for backward compatibility with older manifests.
                 type: string
               tokenSecretRef:
                 description: |-
@@ -190,10 +192,17 @@ spec:
                 required:
                 - name
                 type: object
+              tunnelName:
+                description: |-
+                  TunnelName is the Cloudflare-side tunnel name used to create/query the tunnel.
+                  It is independent from Kubernetes metadata.name and does not need to match it.
+                type: string
             required:
             - credentialsRef
-            - name
             type: object
+            x-kubernetes-validations:
+            - message: spec.tunnelName is required (legacy spec.name is still supported)
+              rule: has(self.tunnelName) || has(self.name)
           status:
             description: CloudflareTunnelStatus defines the observed state of CloudflareTunnel.
             properties:

@@ -96,6 +96,13 @@ func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	tunnelName, err := cloudflareTunnelName(tunnel)
+	if err != nil {
+		r.setCondition(tunnel, conditionTunnelReady, metav1.ConditionFalse, "InvalidSpec", err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "InvalidSpec", err.Error())
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{}, nil
+	}
 
 	cfClient, err := r.getCloudflareClient(ctx, tunnel)
 	if err != nil {
@@ -106,11 +113,11 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	}
 	r.setCondition(tunnel, conditionCredentialsReady, metav1.ConditionTrue, "CredentialsLoaded", "Credentials loaded successfully")
 
-	cfTunnel, err := cfClient.GetTunnelByName(ctx, tunnel.Spec.Name)
+	cfTunnel, err := cfClient.GetTunnelByName(ctx, tunnelName)
 	if err != nil {
 		if IsTunnelNotFoundError(err) {
-			log.Info("Creating Cloudflare tunnel", "name", tunnel.Spec.Name)
-			newTunnel, _, createErr := cfClient.CreateTunnel(ctx, tunnel.Spec.Name)
+			log.Info("Creating Cloudflare tunnel", "name", tunnelName)
+			newTunnel, _, createErr := cfClient.CreateTunnel(ctx, tunnelName)
 			if createErr != nil {
 				r.setCondition(tunnel, conditionTunnelReady, metav1.ConditionFalse, "CreateFailed", createErr.Error())
 				r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "CreateFailed", createErr.Error())
@@ -179,6 +186,10 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 
 func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel *networkingv1alpha1.CloudflareTunnel) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	tunnelName, err := cloudflareTunnelName(tunnel)
+	if err != nil {
+		return ctrl.Result{}, nil
+	}
 
 	if !controllerutil.ContainsFinalizer(tunnel, finalizer) {
 		return ctrl.Result{}, nil
@@ -202,8 +213,8 @@ func (r *CloudflareTunnelReconciler) reconcileDelete(ctx context.Context, tunnel
 		log.Info("Deleting Cloudflare tunnel by status ID", "tunnelID", tunnel.Status.TunnelID)
 		deleteErr = cfClient.DeleteTunnelByID(ctx, tunnel.Status.TunnelID)
 	} else {
-		log.Info("Deleting Cloudflare tunnel by name", "name", tunnel.Spec.Name)
-		deleteErr = cfClient.DeleteTunnelByName(ctx, tunnel.Spec.Name)
+		log.Info("Deleting Cloudflare tunnel by name", "name", tunnelName)
+		deleteErr = cfClient.DeleteTunnelByName(ctx, tunnelName)
 	}
 	if deleteErr != nil && !IsTunnelNotFoundError(deleteErr) {
 		if IsTunnelDeleteRetryableError(deleteErr) {
@@ -318,6 +329,16 @@ func (r *CloudflareTunnelReconciler) desiredTokenSecretName(tunnel *networkingv1
 		return tunnel.Spec.TokenSecretRef.Name
 	}
 	return fmt.Sprintf("%s-token", tunnel.Name)
+}
+
+func cloudflareTunnelName(tunnel *networkingv1alpha1.CloudflareTunnel) (string, error) {
+	if tunnel.Spec.TunnelName != "" {
+		return tunnel.Spec.TunnelName, nil
+	}
+	if tunnel.Spec.Name != "" {
+		return tunnel.Spec.Name, nil
+	}
+	return "", fmt.Errorf("spec.tunnelName is required (legacy spec.name is still supported)")
 }
 
 func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(

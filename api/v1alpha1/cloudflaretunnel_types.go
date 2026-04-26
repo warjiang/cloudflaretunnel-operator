@@ -25,10 +25,17 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // CloudflareTunnelSpec defines the desired state of CloudflareTunnel.
+// +kubebuilder:validation:XValidation:rule="has(self.tunnelName) || has(self.name)",message="spec.tunnelName is required (legacy spec.name is still supported)"
 type CloudflareTunnelSpec struct {
-	// Name specifies the name of the Cloudflare tunnel.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	// TunnelName is the Cloudflare-side tunnel name used to create/query the tunnel.
+	// It is independent from Kubernetes metadata.name and does not need to match it.
+	// +optional
+	TunnelName string `json:"tunnelName,omitempty"`
+
+	// Name is deprecated, use tunnelName instead.
+	// Kept for backward compatibility with older manifests.
+	// +optional
+	Name string `json:"name,omitempty"`
 
 	// CredentialsRef points to a Secret that stores Cloudflare credentials.
 	// Required keys:
