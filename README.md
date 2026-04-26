@@ -40,6 +40,13 @@ spec:
   tunnelName: my-first-tunnel
   credentialsRef:
     name: cloudflare-credentials
+  ingress:
+    rules:
+      - path: /api
+        service:
+          name: my-backend
+          namespace: my-backend-ns
+          port: 8080
   connector:
     image: cloudflare/cloudflared:2026.3.0
     replicas: 1
@@ -66,6 +73,7 @@ The operator watches `CloudflareTunnel` resources and ensures:
 - The target Cloudflare Tunnel exists.
 - A Kubernetes Secret containing the tunnel token is created or updated.
 - A dedicated cloudflared Deployment is created for each CloudflareTunnel.
+- Optional ingress-style path forwarding rules are rendered into cloudflared config.
 - Status (`tunnelID`, `tokenSecretName`, `observedGeneration`, conditions) reflects reconciliation state.
 - Finalizers are used to clean up remote tunnel resources during deletion.
 

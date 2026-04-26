@@ -18,6 +18,13 @@ spec:
   tunnelName: createbycr
   credentialsRef:
     name: cloudflare-credentials
+  ingress:
+    rules:
+      - path: /api
+        service:
+          name: demo-backend
+          namespace: demo
+          port: 8080
   connector:
     image: cloudflare/cloudflared:2026.3.0
     replicas: 1

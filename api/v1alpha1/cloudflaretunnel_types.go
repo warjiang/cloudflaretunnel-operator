@@ -52,6 +52,46 @@ type CloudflareTunnelSpec struct {
 	// Connector defines how the cloudflared workload is run in Kubernetes.
 	// +optional
 	Connector *ConnectorSpec `json:"connector,omitempty"`
+
+	// Ingress defines traffic forwarding rules for cloudflared.
+	// Rules are evaluated in order.
+	// +optional
+	Ingress *IngressSpec `json:"ingress,omitempty"`
+}
+
+// IngressSpec defines ingress-like traffic forwarding rules.
+type IngressSpec struct {
+	// Rules defines path to service forwarding rules.
+	// +kubebuilder:validation:MinItems=1
+	Rules []IngressRule `json:"rules"`
+}
+
+// IngressRule defines one forwarding rule.
+type IngressRule struct {
+	// Path is a URL path prefix. If set, it must start with "/".
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// Service is the Kubernetes Service backend in the same namespace.
+	Service IngressServiceBackend `json:"service"`
+}
+
+// IngressServiceBackend references a Kubernetes Service backend.
+type IngressServiceBackend struct {
+	// Name is the Kubernetes Service name.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace is the Service namespace.
+	// If omitted, the CloudflareTunnel namespace is used.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace,omitempty"`
+
+	// Port is the Service port number.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
 }
 
 // ConnectorSpec defines the desired cloudflared workload configuration.

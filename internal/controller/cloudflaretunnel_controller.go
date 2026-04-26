@@ -18,10 +18,13 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,6 +52,8 @@ const (
 	credentialsSecretKeyAPIToken  = "api-token"
 	credentialsSecretKeyAccountID = "account-id"
 	tunnelTokenSecretKey          = "token"
+	connectorConfigFileName       = "config.yaml"
+	connectorConfigMountPath      = "/etc/cloudflared/config"
 
 	defaultConnectorImage    = "cloudflare/cloudflared:2026.3.0"
 	defaultConnectorReplicas = int32(1)
@@ -72,6 +77,7 @@ type CloudflareTunnelReconciler struct {
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cloudflaretunnel.spotty.com.cn,resources=cloudflaretunnels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;delete;deletecollection
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 func (r *CloudflareTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -156,7 +162,20 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	tunnel.Status.TokenSecretName = tokenSecretName
 	r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionTrue, "SecretSynced", "Tunnel token secret is synced")
 
-	connectorDeployment, err := r.reconcileConnectorDeployment(ctx, tunnel)
+	connectorConfigMapName, err := r.reconcileConnectorConfigMap(ctx, tunnel)
+	if err != nil {
+		var invalidIngressErr ingressValidationError
+		reason := "IngressConfigSyncFailed"
+		if errors.As(err, &invalidIngressErr) {
+			reason = "IngressConfigInvalid"
+		}
+		r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionFalse, reason, err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, reason, err.Error())
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{}, nil
+	}
+
+	connectorDeployment, err := r.reconcileConnectorDeployment(ctx, tunnel, connectorConfigMapName)
 	if err != nil {
 		r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionFalse, "DeploymentSyncFailed", err.Error())
 		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "DeploymentSyncFailed", err.Error())
@@ -346,9 +365,130 @@ func cloudflareTunnelName(tunnel *networkingv1alpha1.CloudflareTunnel) (string, 
 	return "", fmt.Errorf("spec.tunnelName is required (legacy spec.name is still supported)")
 }
 
+type ingressValidationError struct {
+	msg string
+}
+
+func (e ingressValidationError) Error() string {
+	return e.msg
+}
+
+type cloudflaredIngressConfig struct {
+	Ingress []cloudflaredIngressRule `yaml:"ingress"`
+}
+
+type cloudflaredIngressRule struct {
+	Path    string `yaml:"path,omitempty"`
+	Service string `yaml:"service"`
+}
+
+func (r *CloudflareTunnelReconciler) reconcileConnectorConfigMap(
+	ctx context.Context,
+	tunnel *networkingv1alpha1.CloudflareTunnel,
+) (string, error) {
+	configContent, enabled, err := r.buildCloudflaredIngressConfig(tunnel)
+	configMapName := desiredConnectorConfigMapName(tunnel)
+	configMapKey := client.ObjectKey{Name: configMapName, Namespace: tunnel.Namespace}
+
+	if !enabled {
+		configMap := &corev1.ConfigMap{}
+		if getErr := r.Get(ctx, configMapKey, configMap); getErr != nil {
+			if apierrors.IsNotFound(getErr) {
+				return "", nil
+			}
+			return "", getErr
+		}
+		if delErr := r.Delete(ctx, configMap); delErr != nil && !apierrors.IsNotFound(delErr) {
+			return "", delErr
+		}
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: tunnel.Namespace,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, configMap, func() error {
+		if configMap.Data == nil {
+			configMap.Data = map[string]string{}
+		}
+		configMap.Data[connectorConfigFileName] = configContent
+		return controllerutil.SetControllerReference(tunnel, configMap, r.Scheme)
+	})
+	if err != nil {
+		return "", err
+	}
+	return configMapName, nil
+}
+
+func (r *CloudflareTunnelReconciler) buildCloudflaredIngressConfig(
+	tunnel *networkingv1alpha1.CloudflareTunnel,
+) (string, bool, error) {
+	if tunnel.Spec.Ingress == nil || len(tunnel.Spec.Ingress.Rules) == 0 {
+		return "", false, nil
+	}
+
+	config := cloudflaredIngressConfig{
+		Ingress: make([]cloudflaredIngressRule, 0, len(tunnel.Spec.Ingress.Rules)+1),
+	}
+	for i, rule := range tunnel.Spec.Ingress.Rules {
+		if rule.Service.Name == "" {
+			return "", true, ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.name is required", i)}
+		}
+		if rule.Service.Port < 1 || rule.Service.Port > 65535 {
+			return "", true, ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.port must be between 1 and 65535", i)}
+		}
+
+		regexPath, err := ingressPrefixToRegex(rule.Path)
+		if err != nil {
+			return "", true, ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].path: %s", i, err.Error())}
+		}
+
+		backendNamespace := tunnel.Namespace
+		if rule.Service.Namespace != "" {
+			backendNamespace = rule.Service.Namespace
+		}
+
+		entry := cloudflaredIngressRule{
+			Service: fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", rule.Service.Name, backendNamespace, rule.Service.Port),
+		}
+		if regexPath != "" {
+			entry.Path = regexPath
+		}
+		config.Ingress = append(config.Ingress, entry)
+	}
+	config.Ingress = append(config.Ingress, cloudflaredIngressRule{Service: "http_status:404"})
+
+	raw, err := yaml.Marshal(config)
+	if err != nil {
+		return "", true, err
+	}
+	return string(raw), true, nil
+}
+
+func ingressPrefixToRegex(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("must start with \"/\"")
+	}
+	trimmed := strings.TrimRight(path, "/")
+	if trimmed == "" {
+		return "^/.*$", nil
+	}
+	return fmt.Sprintf("^%s(/.*)?$", regexp.QuoteMeta(trimmed)), nil
+}
+
 func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(
 	ctx context.Context,
 	tunnel *networkingv1alpha1.CloudflareTunnel,
+	connectorConfigMapName string,
 ) (*appsv1.Deployment, error) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -391,32 +531,56 @@ func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(
 			MatchLabels: labels,
 		}
 		deployment.Spec.Template.Labels = labels
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{
-			{
-				Name:            "cloudflared",
-				Image:           image,
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Args: []string{
-					"tunnel",
-					"--no-autoupdate",
-					"run",
-					"--token",
-					"$(TUNNEL_TOKEN)",
-				},
-				Env: []corev1.EnvVar{
-					{
-						Name: "TUNNEL_TOKEN",
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: r.desiredTokenSecretName(tunnel)},
-								Key:                  tunnelTokenSecretKey,
-							},
+		args := []string{
+			"tunnel",
+			"--no-autoupdate",
+		}
+		if connectorConfigMapName != "" {
+			args = append(args, "--config", fmt.Sprintf("%s/%s", connectorConfigMountPath, connectorConfigFileName))
+		}
+		args = append(args, "run", "--token", "$(TUNNEL_TOKEN)")
+
+		container := corev1.Container{
+			Name:            "cloudflared",
+			Image:           image,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Args:            args,
+			Env: []corev1.EnvVar{
+				{
+					Name: "TUNNEL_TOKEN",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: r.desiredTokenSecretName(tunnel)},
+							Key:                  tunnelTokenSecretKey,
 						},
 					},
 				},
-				Resources: resources,
 			},
+			Resources: resources,
 		}
+		if connectorConfigMapName != "" {
+			container.VolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "cloudflared-config",
+					MountPath: connectorConfigMountPath,
+					ReadOnly:  true,
+				},
+			}
+			deployment.Spec.Template.Spec.Volumes = []corev1.Volume{
+				{
+					Name: "cloudflared-config",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: connectorConfigMapName},
+						},
+					},
+				},
+			}
+		} else {
+			deployment.Spec.Template.Spec.Volumes = nil
+		}
+
+		deployment.Spec.Template.Spec.Containers = []corev1.Container{container}
 		deployment.Spec.Template.Spec.NodeSelector = nodeSelector
 		deployment.Spec.Template.Spec.Tolerations = tolerations
 		return controllerutil.SetControllerReference(tunnel, deployment, r.Scheme)
@@ -433,6 +597,14 @@ func (r *CloudflareTunnelReconciler) reconcileConnectorDeployment(
 
 func desiredConnectorDeploymentName(tunnel *networkingv1alpha1.CloudflareTunnel) string {
 	name := fmt.Sprintf("%s-connector", tunnel.Name)
+	if len(name) <= 63 {
+		return name
+	}
+	return strings.TrimSuffix(name[:63], "-")
+}
+
+func desiredConnectorConfigMapName(tunnel *networkingv1alpha1.CloudflareTunnel) string {
+	name := fmt.Sprintf("%s-connector-config", tunnel.Name)
 	if len(name) <= 63 {
 		return name
 	}
@@ -480,6 +652,7 @@ func (r *CloudflareTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha1.CloudflareTunnel{}).
 		Owns(&corev1.Secret{}).
+		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.Deployment{}).
 		Named("cloudflaretunnel").
 		Complete(r)
