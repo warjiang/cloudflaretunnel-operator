@@ -224,7 +224,9 @@ func (c *Client) EnsureCNAMERecord(ctx context.Context, zoneID, hostname, target
 
 	for _, record := range records {
 		if strings.EqualFold(record.Name, hostname) && strings.EqualFold(record.Type, "CNAME") {
-			if strings.EqualFold(strings.TrimSuffix(record.Content, "."), normalizedTarget) && record.Proxied != nil && *record.Proxied {
+			if strings.EqualFold(strings.TrimSuffix(record.Content, "."), normalizedTarget) &&
+				record.Proxied != nil &&
+				*record.Proxied {
 				return record.ID, nil
 			}
 			updated, updateErr := c.api.UpdateDNSRecord(ctx, rc, cloudflare.UpdateDNSRecordParams{
