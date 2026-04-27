@@ -167,13 +167,28 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 				_ = k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-connector", ingressResourceName), Namespace: "default"}})
 			}()
 
-			mockCloudflareClient.On("GetTunnelByName", ctx, ingressResourceName).Return(nil, fmt.Errorf("not found"))
-			mockCloudflareClient.On("CreateTunnel", ctx, ingressResourceName).Return(&cloudflare.Tunnel{ID: tunnelID}, []byte("test-secret"), nil)
+			mockCloudflareClient.On("GetTunnelByName", ctx, ingressResourceName).Return(nil, fmt.Errorf("not found")).Once()
+			mockCloudflareClient.On("CreateTunnel", ctx, ingressResourceName).Return(&cloudflare.Tunnel{ID: tunnelID}, []byte("test-secret"), nil).Once()
+			mockCloudflareClient.On("GetTunnelByName", ctx, ingressResourceName).Return(&cloudflare.Tunnel{ID: tunnelID, Name: ingressResourceName}, nil)
 			mockCloudflareClient.On("UpsertTunnelConfiguration", ctx, tunnelID, mock.Anything).Return(nil)
 			mockCloudflareClient.On("EnsureCNAMERecord", ctx, "zone-id-123", "karmada.example.com", fmt.Sprintf("%s.cfargotunnel.com", tunnelID)).Return("dns-record-id", nil)
 			mockCloudflareClient.On("GetTunnelTokenByID", ctx, tunnelID).Return("test-token", nil)
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: ingressNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Mark deployment ready so the next reconcile proceeds to routing publication.
+			connectorDeployment := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-ingress-resource-connector", Namespace: "default"}, connectorDeployment)).To(Succeed())
+			connectorDeployment.Status.ObservedGeneration = connectorDeployment.Generation
+			connectorDeployment.Status.Replicas = 1
+			connectorDeployment.Status.ReadyReplicas = 1
+			connectorDeployment.Status.AvailableReplicas = 1
+			Expect(k8sClient.Status().Update(ctx, connectorDeployment)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: ingressNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -186,7 +201,7 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("service: http://backend-svc.backend-ns.svc.cluster.local:8080"))
 			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("service: http_status:404"))
 
-			connectorDeployment := &appsv1.Deployment{}
+			connectorDeployment = &appsv1.Deployment{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-ingress-resource-connector", Namespace: "default"}, connectorDeployment)).To(Succeed())
 			Expect(connectorDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(connectorDeployment.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--config"))
