@@ -35,6 +35,13 @@ Coverage checklist:
 - Tunnel create/get/delete, token fetch, and tunnel config upsert use the tunnel connector write permission above.
 - DNS CNAME create/update/delete uses `DNS Write`.
 
+Common confusion (not the required DNS record permission here):
+
+- `Cloudflare Zero Trust Secure DNS Locations Write`
+- `Account DNS Settings`
+- `DNS Firewall`
+- `DNS View` (read-focused)
+
 ## 3. Create credentials and CloudflareTunnel
 
 ```yaml

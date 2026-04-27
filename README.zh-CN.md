@@ -43,6 +43,15 @@ Cloudflare Tunnel Operator 通过 `CloudflareTunnel` CRD 以声明式方式管�
 - 如配置 ingress，状态达到 `RoutingReady=True` 与 `DNSReady=True`。
 - 删除 `CloudflareTunnel` 后，云端 Tunnel 和托管 DNS 记录会被删除。
 
+常见混淆（都不是本项目 DNS 记录管理所需权限）：
+
+- `Cloudflare Zero Trust Secure DNS Locations Write`
+- `Account DNS Settings`
+- `DNS Firewall`
+- `DNS View`（偏只读）
+
+本项目做 DNS 记录对账时，请选择 `Zone -> DNS Write`。
+
 1. 创建凭据 Secret：
 
 ```yaml

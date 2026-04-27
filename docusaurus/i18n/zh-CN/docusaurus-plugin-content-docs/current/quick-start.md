@@ -35,6 +35,13 @@ make deploy IMG=<image:tag>
 - Tunnel 创建/查询/删除、Token 获取、Tunnel 配置更新使用上述 Tunnel/Connector 写权限。
 - DNS CNAME 创建/更新/删除使用 `DNS Write`。
 
+常见混淆（都不是这里需要的 DNS 记录权限）：
+
+- `Cloudflare Zero Trust Secure DNS Locations Write`
+- `Account DNS Settings`
+- `DNS Firewall`
+- `DNS View`（偏只读）
+
 ## 3. 创建凭据与 CloudflareTunnel
 
 ```yaml

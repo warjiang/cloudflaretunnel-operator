@@ -43,6 +43,15 @@ Permission verification checklist:
 - If ingress is configured, `RoutingReady=True` and `DNSReady=True`.
 - Deleting `CloudflareTunnel` removes remote tunnel and managed DNS record.
 
+Common confusion (not the required DNS record permission for this operator):
+
+- `Cloudflare Zero Trust Secure DNS Locations Write`
+- `Account DNS Settings`
+- `DNS Firewall`
+- `DNS View` (read-focused)
+
+For this operator's DNS record reconciliation, select `Zone -> DNS Write`.
+
 1. Create a credentials Secret:
 
 ```yaml
