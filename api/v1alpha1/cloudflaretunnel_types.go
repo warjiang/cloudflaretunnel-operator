@@ -162,6 +162,11 @@ type CloudflareTunnelStatus struct {
 	// +optional
 	DNSRecordID string `json:"dnsRecordID,omitempty"`
 
+	// DNSHostname is the hostname currently bound to DNSRecordID.
+	// Used to detect hostname changes and clean up stale DNS records.
+	// +optional
+	DNSHostname string `json:"dnsHostname,omitempty"`
+
 	// Conditions represent the latest available observations of a CloudflareTunnel's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

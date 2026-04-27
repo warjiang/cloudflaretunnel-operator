@@ -330,6 +330,11 @@ spec:
                 description: DNSRecordID is the Cloudflare DNS record ID managed for
                   spec.hostname.
                 type: string
+              dnsHostname:
+                description: |-
+                  DNSHostname is the hostname currently bound to DNSRecordID.
+                  Used to detect hostname changes and clean up stale DNS records.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller.
