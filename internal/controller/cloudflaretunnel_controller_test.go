@@ -211,6 +211,49 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(connectorDeployment.Spec.Template.Spec.Volumes[0].ConfigMap).NotTo(BeNil())
 			Expect(connectorDeployment.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("test-ingress-resource-connector-config"))
 
+			updatedTunnel := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, ingressNamespacedName, updatedTunnel)).To(Succeed())
+			Expect(updatedTunnel.Status.DNSHostname).To(Equal("karmada.example.com"))
+
+			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
+
+		It("should delete old dns record when hostname changes", func() {
+			mockCloudflareClient := new(MockCloudflareClient)
+			controllerReconciler := &CloudflareTunnelReconciler{}
+			tunnel := &networkingv1alpha1.CloudflareTunnel{
+				Spec: networkingv1alpha1.CloudflareTunnelSpec{
+					Hostname: "karmada.20220625.xyz",
+					ZoneID:   "zone-id-123",
+					Ingress: &networkingv1alpha1.IngressSpec{
+						Rules: []networkingv1alpha1.IngressRule{
+							{
+								Service: networkingv1alpha1.IngressServiceBackend{
+									Name: "backend",
+									Port: 8080,
+								},
+							},
+						},
+					},
+				},
+				Status: networkingv1alpha1.CloudflareTunnelStatus{
+					DNSRecordID: "dns-record-old",
+					DNSHostname: "k8s.20220625.xyz",
+				},
+			}
+
+			mockCloudflareClient.
+				On("DeleteDNSRecordByID", ctx, "zone-id-123", "dns-record-old").
+				Return(nil).
+				Once()
+			mockCloudflareClient.
+				On("EnsureCNAMERecord", ctx, "zone-id-123", "karmada.20220625.xyz", "test-tunnel-id.cfargotunnel.com").
+				Return("dns-record-new", nil).
+				Once()
+
+			recordID, err := controllerReconciler.reconcileTunnelDNS(ctx, tunnel, mockCloudflareClient, "test-tunnel-id")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(recordID).To(Equal("dns-record-new"))
 			mockCloudflareClient.AssertExpectations(GinkgoT())
 		})
 

@@ -238,8 +238,10 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	}
 	tunnel.Status.DNSRecordID = dnsRecordID
 	if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
+		tunnel.Status.DNSHostname = tunnel.Spec.Hostname
 		r.setCondition(tunnel, conditionDNSReady, metav1.ConditionTrue, "DNSReady", "Public DNS record is configured")
 	} else {
+		tunnel.Status.DNSHostname = ""
 		r.setCondition(tunnel, conditionDNSReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
 	}
 
@@ -615,6 +617,17 @@ func (r *CloudflareTunnelReconciler) reconcileTunnelDNS(
 		}
 		return "", nil
 	}
+
+	// Hostname can change over time. Clean up the previously managed DNS record
+	// to avoid leaving a stale public hostname behind.
+	if tunnel.Status.DNSRecordID != "" &&
+		tunnel.Status.DNSHostname != "" &&
+		!strings.EqualFold(tunnel.Status.DNSHostname, tunnel.Spec.Hostname) {
+		if err := cfClient.DeleteDNSRecordByID(ctx, tunnel.Spec.ZoneID, tunnel.Status.DNSRecordID); err != nil && !IsDNSRecordNotFoundError(err) {
+			return tunnel.Status.DNSRecordID, err
+		}
+	}
+
 	dnsTarget := fmt.Sprintf("%s.cfargotunnel.com", tunnelID)
 	return cfClient.EnsureCNAMERecord(ctx, tunnel.Spec.ZoneID, tunnel.Spec.Hostname, dnsTarget)
 }
