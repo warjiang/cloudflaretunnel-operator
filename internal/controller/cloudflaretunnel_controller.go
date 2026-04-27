@@ -50,6 +50,7 @@ const (
 	conditionTokenSecretReady = "TokenSecretReady"
 	conditionConnectorReady   = "ConnectorReady"
 	conditionRoutingReady     = "RoutingReady"
+	conditionDNSReady         = "DNSReady"
 
 	credentialsSecretKeyAPIToken  = "api-token"
 	credentialsSecretKeyAccountID = "account-id"
@@ -153,6 +154,25 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	tunnel.Status.TunnelID = cfTunnel.ID
 	r.setCondition(tunnel, conditionTunnelReady, metav1.ConditionTrue, "TunnelReady", "Tunnel exists")
 
+	// Sync remote tunnel ingress configuration before starting connector.
+	// This prevents deadlocks when the remote tunnel config is stale/invalid.
+	if err := r.reconcileTunnelRoutingConfig(ctx, tunnel, cfClient, cfTunnel.ID); err != nil {
+		var invalidIngressErr ingressValidationError
+		reason := "RoutingSyncFailed"
+		if errors.As(err, &invalidIngressErr) {
+			reason = "RoutingConfigInvalid"
+		}
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionFalse, reason, err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, reason, err.Error())
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+	if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Tunnel routing configuration is synced")
+	} else {
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
+	}
+
 	token, err := cfClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
 	if err != nil {
 		r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionFalse, "TokenFetchFailed", err.Error())
@@ -208,24 +228,19 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 
 	r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionTrue, "DeploymentReady", "Connector deployment is ready")
 
-	// Configure public routing only after connector is ready to minimize user-facing downtime windows.
-	dnsRecordID, err := r.reconcilePublishedRouting(ctx, tunnel, cfClient, cfTunnel.ID)
+	// Publish DNS only after connector is ready to minimize user-facing downtime windows.
+	dnsRecordID, err := r.reconcileTunnelDNS(ctx, tunnel, cfClient, cfTunnel.ID)
 	if err != nil {
-		var invalidIngressErr ingressValidationError
-		reason := "RoutingSyncFailed"
-		if errors.As(err, &invalidIngressErr) {
-			reason = "RoutingConfigInvalid"
-		}
-		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionFalse, reason, err.Error())
-		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, reason, err.Error())
+		r.setCondition(tunnel, conditionDNSReady, metav1.ConditionFalse, "DNSSyncFailed", err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, "DNSSyncFailed", err.Error())
 		_ = r.updateStatus(ctx, tunnel)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	tunnel.Status.DNSRecordID = dnsRecordID
 	if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
-		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Public hostname routing is configured")
+		r.setCondition(tunnel, conditionDNSReady, metav1.ConditionTrue, "DNSReady", "Public DNS record is configured")
 	} else {
-		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
+		r.setCondition(tunnel, conditionDNSReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
 	}
 
 	r.setCondition(tunnel, conditionReady, metav1.ConditionTrue, "Ready", "Cloudflare tunnel is ready")
@@ -536,39 +551,34 @@ func ingressPrefixToRegex(path string) (string, error) {
 	return fmt.Sprintf("^%s(/.*)?$", regexp.QuoteMeta(trimmed)), nil
 }
 
-func (r *CloudflareTunnelReconciler) reconcilePublishedRouting(
+func (r *CloudflareTunnelReconciler) reconcileTunnelRoutingConfig(
 	ctx context.Context,
 	tunnel *networkingv1alpha1.CloudflareTunnel,
 	cfClient pkgcloudflare.ClientInterface,
 	tunnelID string,
-) (string, error) {
+) error {
 	if tunnel.Spec.Ingress == nil || len(tunnel.Spec.Ingress.Rules) == 0 {
-		if tunnel.Status.DNSRecordID != "" && tunnel.Spec.ZoneID != "" {
-			if err := cfClient.DeleteDNSRecordByID(ctx, tunnel.Spec.ZoneID, tunnel.Status.DNSRecordID); err != nil && !IsDNSRecordNotFoundError(err) {
-				return tunnel.Status.DNSRecordID, err
-			}
-		}
-		return "", nil
+		return nil
 	}
 	if tunnel.Spec.Hostname == "" {
-		return "", ingressValidationError{msg: "spec.hostname is required when spec.ingress is set"}
+		return ingressValidationError{msg: "spec.hostname is required when spec.ingress is set"}
 	}
 	if tunnel.Spec.ZoneID == "" {
-		return "", ingressValidationError{msg: "spec.zoneID is required when spec.ingress is set"}
+		return ingressValidationError{msg: "spec.zoneID is required when spec.ingress is set"}
 	}
 
 	rules := make([]pkgcloudflare.TunnelIngressRule, 0, len(tunnel.Spec.Ingress.Rules)+1)
 	for i, rule := range tunnel.Spec.Ingress.Rules {
 		if rule.Service.Name == "" {
-			return "", ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.name is required", i)}
+			return ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.name is required", i)}
 		}
 		if rule.Service.Port < 1 || rule.Service.Port > 65535 {
-			return "", ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.port must be between 1 and 65535", i)}
+			return ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].service.port must be between 1 and 65535", i)}
 		}
 
 		regexPath, err := ingressPrefixToRegex(rule.Path)
 		if err != nil {
-			return "", ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].path: %s", i, err.Error())}
+			return ingressValidationError{msg: fmt.Sprintf("spec.ingress.rules[%d].path: %s", i, err.Error())}
 		}
 
 		backendNamespace := tunnel.Namespace
@@ -586,9 +596,25 @@ func (r *CloudflareTunnelReconciler) reconcilePublishedRouting(
 	})
 
 	if err := cfClient.UpsertTunnelConfiguration(ctx, tunnelID, rules); err != nil {
-		return "", err
+		return err
 	}
+	return nil
+}
 
+func (r *CloudflareTunnelReconciler) reconcileTunnelDNS(
+	ctx context.Context,
+	tunnel *networkingv1alpha1.CloudflareTunnel,
+	cfClient pkgcloudflare.ClientInterface,
+	tunnelID string,
+) (string, error) {
+	if tunnel.Spec.Ingress == nil || len(tunnel.Spec.Ingress.Rules) == 0 {
+		if tunnel.Status.DNSRecordID != "" && tunnel.Spec.ZoneID != "" {
+			if err := cfClient.DeleteDNSRecordByID(ctx, tunnel.Spec.ZoneID, tunnel.Status.DNSRecordID); err != nil && !IsDNSRecordNotFoundError(err) {
+				return tunnel.Status.DNSRecordID, err
+			}
+		}
+		return "", nil
+	}
 	dnsTarget := fmt.Sprintf("%s.cfargotunnel.com", tunnelID)
 	return cfClient.EnsureCNAMERecord(ctx, tunnel.Spec.ZoneID, tunnel.Spec.Hostname, dnsTarget)
 }
