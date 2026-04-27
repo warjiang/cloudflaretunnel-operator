@@ -11,7 +11,31 @@ make docker-push IMG=<image:tag>
 make deploy IMG=<image:tag>
 ```
 
-## 2. Create credentials and CloudflareTunnel
+## 2. Create Cloudflare API Token
+
+Create a custom token in Cloudflare:
+`My Profile -> API Tokens -> Create Token -> Create Custom Token`.
+
+Required permissions:
+
+- One Account permission below (names vary by Cloudflare UI version):
+  - `Cloudflare One Connectors Write`
+  - `Cloudflare One Connector: cloudflared Write`
+  - `Cloudflare Tunnel Write`
+- Legacy name you may still see in old docs/UI: `Cloudflare Tunnel: Edit`
+- `Zone -> DNS Write` (legacy label: `DNS: Edit`, required when using `ingress + hostname + zoneID`)
+
+Recommended resource scope:
+
+- `Account Resources -> Include -> Specific account -> <your-account>`
+- `Zone Resources -> Include -> Specific zone -> <your-zone>` (or all managed zones)
+
+Coverage checklist:
+
+- Tunnel create/get/delete, token fetch, and tunnel config upsert use the tunnel connector write permission above.
+- DNS CNAME create/update/delete uses `DNS Write`.
+
+## 3. Create credentials and CloudflareTunnel
 
 ```yaml
 apiVersion: v1
@@ -43,14 +67,14 @@ Apply:
 kubectl apply -f demo.yaml
 ```
 
-## 3. Verify reconciliation
+## 4. Verify reconciliation
 
 ```bash
 kubectl get cloudflaretunnel my-tunnel -n default -o yaml
 kubectl get secret my-tunnel-token -n default -o yaml
 ```
 
-## 4. Expected behavior
+## 5. Expected behavior
 
 - If the tunnel does not exist, the operator creates it.
 - The tunnel token is synced to `spec.tokenSecretRef.name`.
