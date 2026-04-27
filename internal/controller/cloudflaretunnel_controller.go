@@ -153,28 +153,6 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	tunnel.Status.TunnelID = cfTunnel.ID
 	r.setCondition(tunnel, conditionTunnelReady, metav1.ConditionTrue, "TunnelReady", "Tunnel exists")
 
-	dnsRecordID, err := r.reconcilePublishedRouting(ctx, tunnel, cfClient, cfTunnel.ID)
-	if err != nil {
-		var invalidIngressErr ingressValidationError
-		reason := "RoutingSyncFailed"
-		if errors.As(err, &invalidIngressErr) {
-			reason = "RoutingConfigInvalid"
-		}
-		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionFalse, reason, err.Error())
-	} else {
-		tunnel.Status.DNSRecordID = dnsRecordID
-		if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
-			r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Public hostname routing is configured")
-		} else {
-			r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
-		}
-	}
-	if tunnel.Spec.Ingress == nil || len(tunnel.Spec.Ingress.Rules) == 0 {
-		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
-	} else {
-		// keep condition set by reconcilePublishedRouting result
-	}
-
 	token, err := cfClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
 	if err != nil {
 		r.setCondition(tunnel, conditionTokenSecretReady, metav1.ConditionFalse, "TokenFetchFailed", err.Error())
@@ -229,6 +207,27 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 	}
 
 	r.setCondition(tunnel, conditionConnectorReady, metav1.ConditionTrue, "DeploymentReady", "Connector deployment is ready")
+
+	// Configure public routing only after connector is ready to minimize user-facing downtime windows.
+	dnsRecordID, err := r.reconcilePublishedRouting(ctx, tunnel, cfClient, cfTunnel.ID)
+	if err != nil {
+		var invalidIngressErr ingressValidationError
+		reason := "RoutingSyncFailed"
+		if errors.As(err, &invalidIngressErr) {
+			reason = "RoutingConfigInvalid"
+		}
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionFalse, reason, err.Error())
+		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, reason, err.Error())
+		_ = r.updateStatus(ctx, tunnel)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+	tunnel.Status.DNSRecordID = dnsRecordID
+	if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Public hostname routing is configured")
+	} else {
+		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
+	}
+
 	r.setCondition(tunnel, conditionReady, metav1.ConditionTrue, "Ready", "Cloudflare tunnel is ready")
 
 	if err := r.updateStatus(ctx, tunnel); err != nil {
