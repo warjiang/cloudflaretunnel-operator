@@ -52,6 +52,18 @@ Cloudflare Tunnel Operator 通过 `CloudflareTunnel` CRD 以声明式方式管�
 
 本项目做 DNS 记录对账时，请选择 `Zone -> DNS Write`。
 
+快速验证脚本：
+
+```bash
+./hack/verify-cloudflare-token-permissions.sh \
+  --api-token "$API_TOKEN" \
+  --account-id "$ACCOUNT_ID" \
+  --zone-id "$ZONE_ID" \
+  --hostname "permcheck.example.com" \
+  --write-check \
+  --dns-write-check
+```
+
 1. 创建凭据 Secret：
 
 ```yaml

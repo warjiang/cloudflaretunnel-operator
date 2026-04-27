@@ -52,6 +52,18 @@ Common confusion (not the required DNS record permission for this operator):
 
 For this operator's DNS record reconciliation, select `Zone -> DNS Write`.
 
+Quick verification script:
+
+```bash
+./hack/verify-cloudflare-token-permissions.sh \
+  --api-token "$API_TOKEN" \
+  --account-id "$ACCOUNT_ID" \
+  --zone-id "$ZONE_ID" \
+  --hostname "permcheck.example.com" \
+  --write-check \
+  --dns-write-check
+```
+
 1. Create a credentials Secret:
 
 ```yaml
