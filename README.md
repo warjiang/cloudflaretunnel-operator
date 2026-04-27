@@ -14,6 +14,56 @@ Prerequisites:
 - A Cloudflare API Token with tunnel permissions
 - Cloudflare Account ID
 
+### Cloudflare API Token Setup (Zero Trust Tunnel)
+
+Create a custom API Token in Cloudflare:
+`My Profile -> API Tokens -> Create Token -> Create Custom Token`.
+
+Recommended permissions and scope:
+
+- Required for tunnel lifecycle:
+  - One of the following Account permissions (names vary by Cloudflare UI version):
+    - `Cloudflare One Connectors Write`
+    - `Cloudflare One Connector: cloudflared Write`
+    - `Cloudflare Tunnel Write`
+  - Legacy name you may still see in older docs/UI: `Cloudflare Tunnel: Edit`
+  - `Account Resources -> Include -> Specific account -> <your-account>`
+- Required when using public hostname (`spec.ingress` + `spec.hostname` + `spec.zoneID`):
+  - `Zone -> DNS Write` (legacy label: `DNS: Edit`)
+  - `Zone Resources -> Include -> Specific zone -> <your-zone>` (or all managed zones)
+
+Coverage map to operator behavior:
+
+- Tunnel create/get/delete, token fetch, and remote ingress config upsert are covered by the tunnel connector write permission above.
+- DNS CNAME create/update/delete for `<tunnel-id>.cfargotunnel.com` is covered by `DNS Write`.
+
+Permission verification checklist:
+
+- `CloudflareTunnel` reaches `TunnelReady=True`.
+- If ingress is configured, `RoutingReady=True` and `DNSReady=True`.
+- Deleting `CloudflareTunnel` removes remote tunnel and managed DNS record.
+
+Common confusion (not the required DNS record permission for this operator):
+
+- `Cloudflare Zero Trust Secure DNS Locations Write`
+- `Account DNS Settings`
+- `DNS Firewall`
+- `DNS View` (read-focused)
+
+For this operator's DNS record reconciliation, select `Zone -> DNS Write`.
+
+Quick verification script:
+
+```bash
+./hack/verify-cloudflare-token-permissions.sh \
+  --api-token "$API_TOKEN" \
+  --account-id "$ACCOUNT_ID" \
+  --zone-id "$ZONE_ID" \
+  --hostname "permcheck.example.com" \
+  --write-check \
+  --dns-write-check
+```
+
 1. Create a credentials Secret:
 
 ```yaml

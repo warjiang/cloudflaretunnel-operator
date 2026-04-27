@@ -14,6 +14,56 @@ Cloudflare Tunnel Operator 通过 `CloudflareTunnel` CRD 以声明式方式管�
 - 具备 Tunnel 权限的 Cloudflare API Token
 - Cloudflare Account ID
 
+### Cloudflare API Token 申请（Zero Trust Tunnel）
+
+在 Cloudflare 控制台创建自定义 API Token：
+`My Profile -> API Tokens -> Create Token -> Create Custom Token`。
+
+推荐权限与范围：
+
+- Tunnel 生命周期必需权限：
+  - 以下 Account 权限三选一（Cloudflare 不同版本 UI 名称不同）：
+    - `Cloudflare One Connectors Write`
+    - `Cloudflare One Connector: cloudflared Write`
+    - `Cloudflare Tunnel Write`
+  - 旧版文档/UI 可能显示为：`Cloudflare Tunnel: Edit`
+  - `Account Resources -> Include -> Specific account -> <your-account>`
+- 使用公网域名发布（`spec.ingress` + `spec.hostname` + `spec.zoneID`）必需权限：
+  - `Zone -> DNS Write`（旧标签可能显示为 `DNS: Edit`）
+  - `Zone Resources -> Include -> Specific zone -> <your-zone>`（或纳管的全部 zones）
+
+与 Operator 能力的对应关系：
+
+- Tunnel 创建/查询/删除、Token 获取、远端 ingress 配置更新由上述 Tunnel/Connector 写权限覆盖。
+- `<tunnel-id>.cfargotunnel.com` 的 CNAME 创建/更新/删除由 `DNS Write` 覆盖。
+
+权限验证清单：
+
+- `CloudflareTunnel` 状态达到 `TunnelReady=True`。
+- 如配置 ingress，状态达到 `RoutingReady=True` 与 `DNSReady=True`。
+- 删除 `CloudflareTunnel` 后，云端 Tunnel 和托管 DNS 记录会被删除。
+
+常见混淆（都不是本项目 DNS 记录管理所需权限）：
+
+- `Cloudflare Zero Trust Secure DNS Locations Write`
+- `Account DNS Settings`
+- `DNS Firewall`
+- `DNS View`（偏只读）
+
+本项目做 DNS 记录对账时，请选择 `Zone -> DNS Write`。
+
+快速验证脚本：
+
+```bash
+./hack/verify-cloudflare-token-permissions.sh \
+  --api-token "$API_TOKEN" \
+  --account-id "$ACCOUNT_ID" \
+  --zone-id "$ZONE_ID" \
+  --hostname "permcheck.example.com" \
+  --write-check \
+  --dns-write-check
+```
+
 1. 创建凭据 Secret：
 
 ```yaml
