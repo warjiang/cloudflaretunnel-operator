@@ -56,4 +56,19 @@ func (m *MockCloudflareClient) GetTunnelTokenByName(ctx context.Context, name st
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockCloudflareClient) UpsertTunnelConfiguration(ctx context.Context, tunnelID string, rules []pkgcloudflare.TunnelIngressRule) error {
+	args := m.Called(ctx, tunnelID, rules)
+	return args.Error(0)
+}
+
+func (m *MockCloudflareClient) EnsureCNAMERecord(ctx context.Context, zoneID, hostname, target string) (string, error) {
+	args := m.Called(ctx, zoneID, hostname, target)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCloudflareClient) DeleteDNSRecordByID(ctx context.Context, zoneID, recordID string) error {
+	args := m.Called(ctx, zoneID, recordID)
+	return args.Error(0)
+}
+
 var _ pkgcloudflare.ClientInterface = &MockCloudflareClient{}

@@ -138,7 +138,9 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 					Namespace: "default",
 				},
 				Spec: networkingv1alpha1.CloudflareTunnelSpec{
-					Name: ingressResourceName,
+					Name:     ingressResourceName,
+					Hostname: "karmada.example.com",
+					ZoneID:   "zone-id-123",
 					CredentialsRef: networkingv1alpha1.CredentialsSecretRef{
 						Name: "cloudflare-credentials",
 					},
@@ -167,6 +169,8 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 
 			mockCloudflareClient.On("GetTunnelByName", ctx, ingressResourceName).Return(nil, fmt.Errorf("not found"))
 			mockCloudflareClient.On("CreateTunnel", ctx, ingressResourceName).Return(&cloudflare.Tunnel{ID: tunnelID}, []byte("test-secret"), nil)
+			mockCloudflareClient.On("UpsertTunnelConfiguration", ctx, tunnelID, mock.Anything).Return(nil)
+			mockCloudflareClient.On("EnsureCNAMERecord", ctx, "zone-id-123", "karmada.example.com", fmt.Sprintf("%s.cfargotunnel.com", tunnelID)).Return("dns-record-id", nil)
 			mockCloudflareClient.On("GetTunnelTokenByID", ctx, tunnelID).Return("test-token", nil)
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -177,6 +181,7 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			connectorConfigMap := &corev1.ConfigMap{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "test-ingress-resource-connector-config", Namespace: "default"}, connectorConfigMap)).To(Succeed())
 			Expect(connectorConfigMap.Data).To(HaveKey(connectorConfigFileName))
+			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("hostname: karmada.example.com"))
 			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("path: ^/api(/.*)?$"))
 			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("service: http://backend-svc.backend-ns.svc.cluster.local:8080"))
 			Expect(connectorConfigMap.Data[connectorConfigFileName]).To(ContainSubstring("service: http_status:404"))
@@ -236,6 +241,33 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 
 			mockCloudflareClient.On("DeleteTunnelByID", ctx, tunnelID).Return(nil).Once()
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
+
+		It("should delete managed dns record before deleting tunnel", func() {
+			mockCloudflareClient := new(MockCloudflareClient)
+			controllerReconciler := &CloudflareTunnelReconciler{
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				CloudflareClient: mockCloudflareClient,
+			}
+
+			resource := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.ZoneID = "zone-id-123"
+			resource.Finalizers = append(resource.Finalizers, finalizer)
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			resource.Status.TunnelID = tunnelID
+			resource.Status.DNSRecordID = "dns-record-id"
+			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			mockCloudflareClient.On("DeleteDNSRecordByID", ctx, "zone-id-123", "dns-record-id").Return(nil).Once()
+			mockCloudflareClient.On("DeleteTunnelByID", ctx, tunnelID).Return(nil).Once()
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			mockCloudflareClient.AssertExpectations(GinkgoT())
 		})
@@ -314,6 +346,33 @@ var _ = Describe("CloudflareTunnel Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resourceAfterReconcile.Finalizers).NotTo(ContainElement(finalizer))
 			mockCloudflareClient.AssertExpectations(GinkgoT())
+		})
+
+		It("should skip cloudflare cleanup when credentials secret is missing during delete", func() {
+			controllerReconciler := &CloudflareTunnelReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			resource := &networkingv1alpha1.CloudflareTunnel{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Finalizers = append(resource.Finalizers, finalizer)
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			resource.Status.TunnelID = tunnelID
+			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			resourceAfterReconcile := &networkingv1alpha1.CloudflareTunnel{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resourceAfterReconcile)
+			if errors.IsNotFound(err) {
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resourceAfterReconcile.Finalizers).NotTo(ContainElement(finalizer))
 		})
 	})
 })
