@@ -104,11 +104,15 @@ make deploy IMG=<image:tag>
 make docker-buildx IMG=<image:tag>
 ```
 
+跨平台二进制会先在宿主机编译，再由 Docker 仅打包
+`dist/linux-<arch>/manager` 到运行时镜像中。
+
 默认镜像平台：
 
 `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`
 
 可通过 `PLATFORMS=<platforms>` 覆盖。
+单平台镜像可通过 `DOCKER_PLATFORM=<platform>` 覆盖。
 
 使用 Helm（CRD 通过 `crds/` 自动安装）：
 

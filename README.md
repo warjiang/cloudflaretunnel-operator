@@ -107,11 +107,15 @@ For multi-arch image build and push:
 make docker-buildx IMG=<image:tag>
 ```
 
+Cross-platform binaries are built on the host first, then Docker only packages
+`dist/linux-<arch>/manager` into runtime images.
+
 Default image platforms:
 
 `linux/amd64,linux/arm64,linux/s390x,linux/ppc64le`
 
 Override with `PLATFORMS=<platforms>`.
+For single-platform image builds, override with `DOCKER_PLATFORM=<platform>`.
 
 With Helm (CRDs auto-installed from `crds/`):
 

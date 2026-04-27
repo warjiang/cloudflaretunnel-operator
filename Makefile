@@ -125,12 +125,18 @@ build-cross: manifests generate fmt vet clean-dist ## Build manager binary for m
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
-# If you wish to build the manager image targeting other platforms you can use the --platform flag.
-# (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
-# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+# DOCKER_PLATFORM defines the target platform for single-platform image builds.
+DOCKER_PLATFORM ?= linux/$(shell go env GOARCH)
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: ## Build docker image with the manager (host-compiled binary + runtime packaging).
+	$(MAKE) build-cross BINARY_PLATFORMS=$(DOCKER_PLATFORM)
+	@set -euo pipefail; \
+	ARCH=$${DOCKER_PLATFORM#*/}; \
+	if [ ! -f "dist/linux-$${ARCH}/manager" ]; then \
+		echo "Missing binary dist/linux-$${ARCH}/manager"; \
+		exit 1; \
+	fi; \
+	$(CONTAINER_TOOL) build --platform=$(DOCKER_PLATFORM) --build-arg TARGETARCH=$${ARCH} -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -144,14 +150,20 @@ docker-push: ## Push docker image with the manager.
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+docker-buildx: ## Build and push docker image for the manager for cross-platform support (host-compiled binaries + runtime packaging)
+	$(MAKE) build-cross BINARY_PLATFORMS=$(PLATFORMS)
+	@set -euo pipefail; \
+	for platform in $$(echo "$(PLATFORMS)" | tr ',' ' '); do \
+		ARCH=$${platform#*/}; \
+		if [ ! -f "dist/linux-$${ARCH}/manager" ]; then \
+			echo "Missing binary dist/linux-$${ARCH}/manager"; \
+			exit 1; \
+		fi; \
+	done
 	- $(CONTAINER_TOOL) buildx create --name cloudflaretunnel-operator-builder
 	$(CONTAINER_TOOL) buildx use cloudflaretunnel-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile .
 	- $(CONTAINER_TOOL) buildx rm cloudflaretunnel-operator-builder
-	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
