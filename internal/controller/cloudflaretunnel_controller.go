@@ -512,8 +512,7 @@ func (r *CloudflareTunnelReconciler) buildCloudflaredIngressConfig(
 		config.Ingress = append(config.Ingress, entry)
 	}
 	config.Ingress = append(config.Ingress, cloudflaredIngressRule{
-		Hostname: tunnel.Spec.Hostname,
-		Service:  "http_status:404",
+		Service: "http_status:404",
 	})
 
 	raw, err := yaml.Marshal(config)
@@ -583,8 +582,7 @@ func (r *CloudflareTunnelReconciler) reconcilePublishedRouting(
 		})
 	}
 	rules = append(rules, pkgcloudflare.TunnelIngressRule{
-		Hostname: tunnel.Spec.Hostname,
-		Service:  "http_status:404",
+		Service: "http_status:404",
 	})
 
 	if err := cfClient.UpsertTunnelConfiguration(ctx, tunnelID, rules); err != nil {
