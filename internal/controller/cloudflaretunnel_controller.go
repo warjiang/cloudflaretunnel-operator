@@ -161,15 +161,18 @@ func (r *CloudflareTunnelReconciler) reconcile(ctx context.Context, tunnel *netw
 			reason = "RoutingConfigInvalid"
 		}
 		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionFalse, reason, err.Error())
-		r.setCondition(tunnel, conditionReady, metav1.ConditionFalse, reason, err.Error())
-		_ = r.updateStatus(ctx, tunnel)
-		return ctrl.Result{}, nil
-	}
-	tunnel.Status.DNSRecordID = dnsRecordID
-	if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
-		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Public hostname routing is configured")
 	} else {
+		tunnel.Status.DNSRecordID = dnsRecordID
+		if tunnel.Spec.Ingress != nil && len(tunnel.Spec.Ingress.Rules) > 0 {
+			r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "RoutingReady", "Public hostname routing is configured")
+		} else {
+			r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
+		}
+	}
+	if tunnel.Spec.Ingress == nil || len(tunnel.Spec.Ingress.Rules) == 0 {
 		r.setCondition(tunnel, conditionRoutingReady, metav1.ConditionTrue, "NoIngressConfigured", "No ingress rules configured")
+	} else {
+		// keep condition set by reconcilePublishedRouting result
 	}
 
 	token, err := cfClient.GetTunnelTokenByID(ctx, cfTunnel.ID)
